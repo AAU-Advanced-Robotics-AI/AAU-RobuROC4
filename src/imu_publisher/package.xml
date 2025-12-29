@@ -2,8 +2,9 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>imu_publisher</name>
-  <version>0.0.0</version>
-  <description>TODO: Package description</description>
+  <version>0.0.1</version>
+  <description>IMU data publisher node for RobuROC4</description>
+  <maintainer email="sibo@es.aau.dk">Simon Bøgh</maintainer>
   <maintainer email="tssa20@student.aau.dk">roburoc</maintainer>
   <license>TODO: License declaration</license>
 

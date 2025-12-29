@@ -2,8 +2,9 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>RobuROC_sim</name>
-  <version>0.0.0</version>
-  <description>TODO: Package description</description>
+  <version>0.0.1</version>
+  <description>Simulation and SLAM launch files for RobuROC4 platform</description>
+  <maintainer email="sibo@es.aau.dk">Simon Bøgh</maintainer>
   <maintainer email="es-24-rob-9-962@student.aau.dk">ROB962</maintainer>
   <license>Apache-2.0</license>
 
