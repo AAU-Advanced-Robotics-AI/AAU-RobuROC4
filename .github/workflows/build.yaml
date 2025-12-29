@@ -1,0 +1,63 @@
+name: ROS 2 Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    container:
+      image: ros:humble
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install -y \
+            python3-pip \
+            python3-colcon-common-extensions \
+            ros-humble-xacro \
+            ros-humble-joint-state-publisher \
+            ros-humble-robot-state-publisher \
+            ros-humble-gazebo-ros \
+            ros-humble-image-transport \
+            ros-humble-camera-info-manager \
+            ros-humble-vision-msgs \
+            ros-humble-realsense2-camera \
+            ros-humble-realsense2-description \
+            ros-humble-velodyne-description \
+            ros-humble-teleop-twist-keyboard
+          pip3 install canopen pydantic nest-asyncio
+
+      - name: Create workspace and copy source
+        run: |
+          mkdir -p /ros2_ws/src
+          cp -r src/* /ros2_ws/src/
+
+      - name: Install rosdep dependencies
+        run: |
+          cd /ros2_ws
+          rosdep update
+          rosdep install --from-paths src --ignore-src -r -y || true
+
+      - name: Build workspace
+        run: |
+          cd /ros2_ws
+          source /opt/ros/humble/setup.bash
+          colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
+        shell: bash
+
+      - name: List installed packages
+        run: |
+          cd /ros2_ws
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          echo "✅ Successfully built packages:"
+          ros2 pkg list | grep -E 'RobuROC|roburoc|canopen|imu' || echo "Core packages built"
+        shell: bash
