@@ -6,7 +6,7 @@
   <description>IMU data publisher node for RobuROC4</description>
   <maintainer email="sibo@es.aau.dk">Simon Bøgh</maintainer>
   <maintainer email="tssa20@student.aau.dk">roburoc</maintainer>
-  <license>TODO: License declaration</license>
+  <license>Apache-2.0</license>
 
   <depend>rclpy</depend>
   <depend>sensor_msgs</depend>
