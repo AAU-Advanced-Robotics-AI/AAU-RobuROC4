@@ -1,34 +1,96 @@
-# RobuROC - Mapping and Localising
-### Table of contents
-- [General info](#p1)
-    - [1Mapping.launch.py](#p1.1)
-    - [2Mapping.launch.py](#p1.2)
-- [Setup](#p2)
+# RobuROC4 - Autonomous Mobile Robot Platform
 
-## General info <a name="p1">
-This code has been used for for testing of the RobuROC platform.
-RTAB-Map has been used for mapping and localising. The outputs from sensors and RTAB-Map is being visualised in Rviz.
-Furthermore platform has been controlled through joystick.
-For testing purposes two mapping algorithms has been created:
+ROS 2 software stack for the RobuROC4 robotic platform, featuring SLAM, CANopen motor control, and simulation capabilities.
 
-### 1Mapping.launch.py <a name="p1.1">
-This algorithm utilises RGB-D camera for visual odometry and dual RGB-D camera mapping.
+## Table of Contents
+- [Overview](#overview)
+- [File Structure](#file-structure)
+- [Mapping Algorithms](#mapping-algorithms)
+- [Setup](#setup)
 
-### 2Mapping.launch.py <a name="p1.2">
-This algorithm utilises LiDAR for ICP odometry LiDAR based mapping.
+## Overview
 
-## Setup <a name="p2">
-### How to run Platform
-1. Build the package with `colcon build`
-2. Source packages `source instalL/setup.bash`
-3. Choose mapping algorithm
-4. Launch file with `ros2 launch RobuROC_sim 1Mapping.launch.py` or `ros2 launch RobuROC_sim 2Mapping.launch.py`
-5. To controll robot with controller. Open new terminal
-6. Run `ros2 launch roburoc_comtroller RobuROC_Controller_launch.py`
+This repository contains ROS 2 packages for operating and simulating the RobuROC4 platform. The RobuROC4 is a 4-wheeled skid-steer robot equipped with RGB-D cameras and LiDAR sensors for autonomous navigation.
 
-### How to run Simulation
-1. Build the package with `colcon build`.
-2. Source packages `source instalL/setup.bash`
-3. Launch file with `ros2 launch RobuROC_sim RobuROC_sim.launch.py`
-4. Open new terminal
-5. Run `ros2 run teleop_twist_keyboard teleop_twist_keyboard`
+**Key Features:**
+- **RTAB-Map SLAM** — Real-time mapping and localization with loop closure detection
+- **CANopen motor control** — Direct communication with wheel motor controllers via CAN bus
+- **Gazebo simulation** — Full robot simulation with sensor plugins (RealSense, Velodyne)
+- **Joystick control** — Manual teleoperation via gamepad controller
+
+**Sensors Supported:**
+- Intel RealSense RGB-D cameras (x2)
+- Velodyne VLP-16 LiDAR
+- IMU
+
+## File Structure
+
+```
+P9-RobuROC4/
+├── src/
+│   ├── RobuROC_sim/         # Simulation and SLAM launch files, URDF models
+│   ├── roburoc_canopen/     # CANopen motor controller interface
+│   ├── roburoc_controller/  # Joystick/controller input handling
+│   ├── canopen_interfaces/  # Custom CANopen ROS messages/services
+│   ├── imu_publisher/       # IMU data publishing node
+│   └── thirdparty/          # External dependencies
+│       ├── realsense_gazebo_plugin/
+│       └── velodyne_simulator/
+├── RobuROC 4 Docs/          # Platform documentation and manuals
+└── Minimally working example/
+```
+
+## Mapping Algorithms
+
+Two SLAM configurations are available depending on sensor preference:
+
+| Launch File | Odometry Source | Mapping Sensors |
+|-------------|-----------------|-----------------|
+| `1Mapping.launch.py` | Visual (RGB-D) | Dual RGB-D cameras |
+| `2Mapping.launch.py` | ICP (LiDAR) | Velodyne LiDAR |
+
+Both configurations output a 3D occupancy grid map and robot pose estimates, visualized in RViz.
+
+## Setup
+
+### Prerequisites
+- ROS 2 (Humble/Iron)
+- Gazebo (for simulation)
+- RTAB-Map ROS packages
+- `teleop_twist_keyboard` (for simulation control)
+
+### Running on Hardware
+
+1. **Build the workspace:**
+   ```bash
+   colcon build
+   source install/setup.bash
+   ```
+
+2. **Launch SLAM** (choose one based on sensor setup):
+   ```bash
+   ros2 launch RobuROC_sim 1Mapping.launch.py  # RGB-D based
+   ros2 launch RobuROC_sim 2Mapping.launch.py  # LiDAR based
+   ```
+
+3. **Enable controller** (new terminal):
+   ```bash
+   ros2 launch roburoc_controller RobuROC_Controller_launch.py
+   ```
+
+4. **Visualize** — RViz launches automatically showing the map, point clouds, and robot pose.
+
+### Running Simulation
+
+1. **Build and launch Gazebo:**
+   ```bash
+   colcon build
+   source install/setup.bash
+   ros2 launch RobuROC_sim RobuROC_sim.launch.py
+   ```
+
+2. **Control the robot** (new terminal):
+   ```bash
+   ros2 run teleop_twist_keyboard teleop_twist_keyboard
+   ```
+   Use `i/j/k/l` keys to drive the robot in Gazebo.
