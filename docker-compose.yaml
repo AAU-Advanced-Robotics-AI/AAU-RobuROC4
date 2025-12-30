@@ -1,0 +1,27 @@
+services:
+  # Build verification service - just builds and exits
+  build:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: roburoc4:humble
+    command: >
+      bash -c "source /opt/ros/humble/setup.bash && 
+               source /ros2_ws/install/setup.bash && 
+               echo '✅ Build successful! All packages compiled.' &&
+               ros2 pkg list | grep -E 'RobuROC|roburoc|canopen|imu'"
+
+  # Development shell - interactive container
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: roburoc4:humble
+    stdin_open: true
+    tty: true
+    command: /bin/bash
+    volumes:
+      - ./src:/ros2_ws/src:rw
+    environment:
+      - DISPLAY=${DISPLAY:-:0}
+    network_mode: host

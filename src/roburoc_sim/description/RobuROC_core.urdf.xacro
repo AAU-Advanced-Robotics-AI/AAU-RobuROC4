@@ -34,7 +34,7 @@
         <visual>
             <origin xyz="${chassis_vis_origin}" rpy="${rot_90} 0 ${rot_90}"/>
             <geometry>
-                <mesh filename="file://$(find RobuROC_sim)/meshes/chassis.STL" scale="${scale}"/>
+                <mesh filename="file://$(find roburoc_sim)/meshes/chassis.STL" scale="${scale}"/>
             </geometry>
             <material name="grey" />
         </visual>
@@ -66,7 +66,7 @@
         <visual>
             <origin xyz="0 0 0" rpy="0 ${rot_90} 0"/>
             <geometry>
-                <mesh filename="file://$(find RobuROC_sim)/meshes/wheel.STL" scale = "${scale}"/>
+                <mesh filename="file://$(find roburoc_sim)/meshes/wheel.STL" scale = "${scale}"/>
             </geometry>
             <material name="black" />
         </visual>
@@ -98,7 +98,7 @@
         <visual>
             <origin xyz="0 0 0" rpy="0 ${rot_90} 0"/>
             <geometry>
-                <mesh filename="file://$(find RobuROC_sim)/meshes/wheel.STL" scale = "${scale}"/>
+                <mesh filename="file://$(find roburoc_sim)/meshes/wheel.STL" scale = "${scale}"/>
             </geometry>
             <material name="black" />
         </visual>
@@ -130,7 +130,7 @@
         <visual>
             <origin xyz="0 0 0" rpy="0 ${rot_90} 0"/>
             <geometry>
-                <mesh filename="file://$(find RobuROC_sim)/meshes/wheel.STL" scale = "${scale}"/>
+                <mesh filename="file://$(find roburoc_sim)/meshes/wheel.STL" scale = "${scale}"/>
             </geometry>
             <material name="black" />
         </visual>
@@ -162,7 +162,7 @@
         <visual>
             <origin xyz="0 0 0" rpy="0 ${rot_90} 0"/>
             <geometry>
-                <mesh filename="file://$(find RobuROC_sim)/meshes/wheel.STL" scale = "${scale}"/>
+                <mesh filename="file://$(find roburoc_sim)/meshes/wheel.STL" scale = "${scale}"/>
             </geometry>
             <material name="black" />
         </visual>

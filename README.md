@@ -28,7 +28,7 @@ This repository contains ROS 2 packages for operating and simulating the RobuROC
 ```
 P9-RobuROC4/
 ├── src/
-│   ├── RobuROC_sim/         # Simulation and SLAM launch files, URDF models
+│   ├── roburoc_sim/         # Simulation and SLAM launch files, URDF models
 │   ├── roburoc_canopen/     # CANopen motor controller interface
 │   ├── roburoc_controller/  # Joystick/controller input handling
 │   ├── canopen_interfaces/  # Custom CANopen ROS messages/services
@@ -69,8 +69,8 @@ Both configurations output a 3D occupancy grid map and robot pose estimates, vis
 
 2. **Launch SLAM** (choose one based on sensor setup):
    ```bash
-   ros2 launch RobuROC_sim 1Mapping.launch.py  # RGB-D based
-   ros2 launch RobuROC_sim 2Mapping.launch.py  # LiDAR based
+   ros2 launch roburoc_sim 1Mapping.launch.py  # RGB-D based
+   ros2 launch roburoc_sim 2Mapping.launch.py  # LiDAR based
    ```
 
 3. **Enable controller** (new terminal):
@@ -86,7 +86,7 @@ Both configurations output a 3D occupancy grid map and robot pose estimates, vis
    ```bash
    colcon build
    source install/setup.bash
-   ros2 launch RobuROC_sim RobuROC_sim.launch.py
+   ros2 launch roburoc_sim roburoc_sim.launch.py
    ```
 
 2. **Control the robot** (new terminal):

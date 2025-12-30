@@ -16,13 +16,13 @@ def generate_launch_description():
     robotXacroName = 'RobuROC'  # Must have same name as in xacro file
 
     # Specify the name of the package and path to xacro file within the package
-    namePackage = 'RobuROC_sim'
+    namePackage = 'roburoc_sim'
     RTABPackage = 'rtabmap_launch'
     d435Package = 'realsense2_camera'             
     PointcloudPackage = 'velodyne_pointcloud'
     VelDriverPackage = 'velodyne_driver'
     # Path to rviz config
-    my_base_path = 'src/RobuROC_sim/src/rviz'   #path to all config files
+    my_base_path = 'src/roburoc_sim/src/rviz'   #path to all config files
     my_rviz_path = my_base_path+'/RobuROC_vis.rviz'       #config file for rviz
 
     # Use xacro to process the file

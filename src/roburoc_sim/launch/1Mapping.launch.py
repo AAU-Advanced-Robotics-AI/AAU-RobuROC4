@@ -16,48 +16,21 @@ def generate_launch_description():
     robotXacroName = 'RobuROC'  # Must have same name as in xacro file
 
     # Specify the name of the package and path to xacro file within the package
-    namePackage = 'RobuROC_sim'
-    RTABPackage = 'rtabmap_launch'
-    d435Package = 'realsense2_camera'             
-    PointcloudPackage = 'velodyne_pointcloud'
-    VelDriverPackage = 'velodyne_driver'
+    namePackage = 'roburoc_sim'
+    
     # Path to rviz config
-    my_base_path = 'src/RobuROC_sim/src/rviz'   #path to all config files
+    my_base_path = 'src/roburoc_sim/src/rviz'   #path to all config files
     my_rviz_path = my_base_path+'/RobuROC_vis.rviz'       #config file for rviz
 
-    # Use xacro to process the file
-    # xacro_file = os.path.join(get_package_share_directory(namePackage),file_subpath)
-    # robot_description_raw = xacro.process_file(xacro_file).toxml()
 
 
+    # Path to model descriptiom
     modelFileRelativePath = 'description/RobuROC_model.urdf.xacro'
-    # worldFileRelativePath = 'worlds/RobuROC_env.world'
-    # worldFileRelativePath = 'worlds/flat.world'
-    worldFileRelativePath = 'worlds/cafe.world'
-    # worldFileRelativePath = 'worlds/empty_world.world'
-    # worldFileRelativePath = 'worlds/moon.world'
-
-    pkg_project = get_package_share_directory(namePackage)
-
     pathModelFile = os.path.join(get_package_share_directory(namePackage),modelFileRelativePath)
-
-    pathWolrdFile = os.path.join(get_package_share_directory(namePackage),worldFileRelativePath)
-
     robotDescription = xacro.process_file(pathModelFile).toxml()
-
-    gazebo_rosPackageLaunch=PythonLaunchDescriptionSource(os.path.join(get_package_share_directory('gazebo_ros'),'launch','gazebo.launch.py'))
-
-    gazeboLaunch=IncludeLaunchDescription(gazebo_rosPackageLaunch,launch_arguments={'world': pathWolrdFile}.items())
 
 
     # Configure the nodes
-
-    spawnModelNode = Node(
-        package='gazebo_ros',
-        executable='spawn_entity.py',
-        arguments=['-topic','robot_description','-entity',robotXacroName],
-        output='screen'
-    )
 
     node_robot_state_publisher = Node(
         package='robot_state_publisher',
@@ -82,10 +55,26 @@ def generate_launch_description():
             arguments=['-d', str(my_rviz_path)]
     )
 
+    realsense_dual = IncludeLaunchDescription(
+            PythonLaunchDescriptionSource([os.path.join(
+                get_package_share_directory(namePackage),'launch','dual_camera.launch.py'
+
+            )]), launch_arguments={'serial_no1':"'310522072602'",                                             # old : 03442207065
+                                   'camera_name':'camera1',
+                                   'camera_namespace':'camera1',
+                                   'serial_no2':"'336222071339'",                                            # old : 829212072207
+                                   'camera_name':'camera2',
+                                   'camera_namespace':'camera2'}.items()
+
+
+    )
+     # front 310522072602
+    # back 336222071339
+
 
     rtab_dual_simple = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([os.path.join(
-            get_package_share_directory(namePackage), 'launch', 'sim_rtab_dual_simple.launch.py'
+            get_package_share_directory(namePackage), 'launch', 'rtab_dual_simple.launch.py'
         )]),
     )
 
@@ -96,10 +85,9 @@ def generate_launch_description():
             default_value='false',
             description='Use sim time if true'),        
         
-        gazeboLaunch,
-        spawnModelNode,
         node_robot_state_publisher,
         joint_state_publisher,
         rviz,
-        # rtab_dual_simple,            # 1st mapping algorithm camera odometry and mapping
+        realsense_dual,            # launching both realsense cameras
+        rtab_dual_simple,            # 1st mapping algorithm camera odometry and mapping
     ])
