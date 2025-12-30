@@ -190,28 +190,43 @@ def generate_launch_description():
     )
 
     # ROS-Gazebo bridge for topic communication between Gazebo and ROS 2
+    # Gazebo topics are discovered via 'gz topic -l'
     ros_gz_bridge = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
         arguments=[
             # Clock for sim time
             '/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock',
-            # Velocity commands
+            # Velocity commands (bidirectional)
             '/cmd_vel@geometry_msgs/msg/Twist@gz.msgs.Twist',
             # Odometry
             '/odom@nav_msgs/msg/Odometry[gz.msgs.Odometry',
             # Joint states
             '/joint_states@sensor_msgs/msg/JointState[gz.msgs.Model',
-            # LIDAR point cloud
-            '/velodyne_points@sensor_msgs/msg/PointCloud2[gz.msgs.PointCloudPacked',
+            # TF
+            '/tf@tf2_msgs/msg/TFMessage[gz.msgs.Pose_V',
+            # LIDAR - point cloud from gpu_lidar (topic/points is the PointCloudPacked)
+            '/velodyne_points/points@sensor_msgs/msg/PointCloud2[gz.msgs.PointCloudPacked',
             # Camera 1 topics
             '/camera1/image@sensor_msgs/msg/Image[gz.msgs.Image',
-            '/camera1/depth@sensor_msgs/msg/Image[gz.msgs.Image',
+            '/camera1/depth_image@sensor_msgs/msg/Image[gz.msgs.Image',
             '/camera1/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo',
+            '/camera1/points@sensor_msgs/msg/PointCloud2[gz.msgs.PointCloudPacked',
             # Camera 2 topics
             '/camera2/image@sensor_msgs/msg/Image[gz.msgs.Image',
-            '/camera2/depth@sensor_msgs/msg/Image[gz.msgs.Image',
+            '/camera2/depth_image@sensor_msgs/msg/Image[gz.msgs.Image',
             '/camera2/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo',
+            '/camera2/points@sensor_msgs/msg/PointCloud2[gz.msgs.PointCloudPacked',
+        ],
+        remappings=[
+            # Remap lidar to expected topic name
+            ('/velodyne_points/points', '/velodyne_points'),
+            # Remap camera depth images to expected names
+            ('/camera1/depth_image', '/camera1/depth'),
+            ('/camera2/depth_image', '/camera2/depth'),
+            # Remap camera points to legacy topic names (for RViz config compatibility)
+            ('/camera1/points', '/camera1/camera1/depth/color/points'),
+            ('/camera2/points', '/camera2/camera2/depth/color/points'),
         ],
         output='screen'
     )
