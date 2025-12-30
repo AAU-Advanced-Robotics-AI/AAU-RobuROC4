@@ -1,21 +1,25 @@
 name: ROS 2 Build
 
+# Build on push and pull request
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
 
+# Build jobs
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-22.04 # Run on Ubuntu 22.04
     container:
-      image: ros:humble
+      image: ros:humble # Use ROS 2 Humble image
     
     steps:
+      # Checkout code from the repository
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Install dependencies
       - name: Install dependencies
         run: |
           apt-get update
@@ -35,17 +39,20 @@ jobs:
             ros-humble-teleop-twist-keyboard
           pip3 install canopen pydantic nest-asyncio
 
+      # Create workspace and copy source
       - name: Create workspace and copy source
         run: |
           mkdir -p /ros2_ws/src
           cp -r src/* /ros2_ws/src/
 
+      # Install rosdep dependencies
       - name: Install rosdep dependencies
         run: |
           cd /ros2_ws
           rosdep update
           rosdep install --from-paths src --ignore-src -r -y || true
 
+      # Build workspace
       - name: Build workspace
         run: |
           cd /ros2_ws
@@ -53,6 +60,7 @@ jobs:
           colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
         shell: bash
 
+      # List installed packages
       - name: List installed packages
         run: |
           cd /ros2_ws
