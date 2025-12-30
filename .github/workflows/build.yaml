@@ -19,35 +19,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Cache apt packages
-      - name: Cache apt packages
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: apt-${{ runner.os }}-humble-${{ hashFiles('.github/workflows/build.yaml') }}
-          restore-keys: |
-            apt-${{ runner.os }}-humble-
-
-      # Cache pip packages
-      - name: Cache pip packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: pip-${{ runner.os }}-${{ hashFiles('.github/workflows/build.yaml') }}
-          restore-keys: |
-            pip-${{ runner.os }}-
-
-      # Cache colcon build
-      - name: Cache colcon build
-        uses: actions/cache@v4
-        with:
-          path: |
-            /ros2_ws/build
-            /ros2_ws/install
-            /ros2_ws/log
-          key: colcon-${{ runner.os }}-${{ hashFiles('src/**/*.xml', 'src/**/*.txt') }}
-          restore-keys: |
-            colcon-${{ runner.os }}-
+      # Note: Caching can be added back if needed for faster builds
+      # See: https://github.com/marketplace/actions/cache
 
       # Install dependencies
       - name: Install dependencies
@@ -67,7 +40,7 @@ jobs:
             ros-humble-realsense2-description \
             ros-humble-velodyne-description \
             ros-humble-teleop-twist-keyboard
-          pip3 install --cache-dir ~/.cache/pip canopen pydantic nest-asyncio
+          pip3 install canopen pydantic nest-asyncio
 
       # Create workspace and copy source
       - name: Create workspace and copy source
