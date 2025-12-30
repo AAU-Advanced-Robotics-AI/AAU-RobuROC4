@@ -20,7 +20,7 @@
   <xacro:property name="topics_ns" value="camera1" />
   <xacro:property name="publish_pointcloud" value="true"/>
 
-  <xacro:gazebo_d435 camera_name="${name}" reference_link="${name}_link" topics_ns="${topics_ns}" depth_optical_frame="${name}_depth_optical_frame" color_optical_frame="${name}_color_optical_frame" infrared1_optical_frame="${name}_left_ir_optical_frame" infrared2_optical_frame="${name}_right_ir_optical_frame" publish_pointcloud="${publish_pointcloud}">
+  <xacro:gazebo_d435 camera_name="${name}" reference_link="${name}_link" topics_ns="${topics_ns}" depth_optical_frame="${name}_depth_frame" color_optical_frame="${name}_color_frame" infrared1_optical_frame="${name}_left_ir_optical_frame" infrared2_optical_frame="${name}_right_ir_optical_frame" publish_pointcloud="${publish_pointcloud}">
   </xacro:gazebo_d435>
 
   <xacro:sensor_d435 parent="base_link" name="camera2" use_nominal_extrinsics="$(arg use_nominal_extrinsics)" add_plug="$(arg add_plug)" use_mesh="$(arg use_mesh)">
@@ -31,7 +31,7 @@
   <xacro:property name="name" value="camera2" />
   <xacro:property name="topics_ns" value="camera2" />
   <xacro:arg name="publish_pointcloud" default="true"/>
-  <xacro:gazebo_d435 camera_name="${name}" reference_link="${name}_link" topics_ns="${topics_ns}" depth_optical_frame="${name}_depth_optical_frame" color_optical_frame="${name}_color_optical_frame" infrared1_optical_frame="${name}_left_ir_optical_frame" infrared2_optical_frame="${name}_right_ir_optical_frame" publish_pointcloud="${publish_pointcloud}">
+  <xacro:gazebo_d435 camera_name="${name}" reference_link="${name}_link" topics_ns="${topics_ns}" depth_optical_frame="${name}_depth_frame" color_optical_frame="${name}_color_frame" infrared1_optical_frame="${name}_left_ir_optical_frame" infrared2_optical_frame="${name}_right_ir_optical_frame" publish_pointcloud="${publish_pointcloud}">
   </xacro:gazebo_d435>
   
 </robot>
