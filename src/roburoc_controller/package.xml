@@ -15,7 +15,7 @@
   <depend>rclcpp</depend>
   <depend>python3-nest-asyncio</depend>
 
-  <exec_depend>canopen_interfaces</exec_depend>
+  <exec_depend>roburoc_canopen_interfaces</exec_depend>
   <exec_depend>roburoc_canopen</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>

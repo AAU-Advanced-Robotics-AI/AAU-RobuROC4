@@ -15,7 +15,7 @@
   <depend>canopen-pip</depend>
   <depend>python3-pydantic</depend>
 
-  <exec_depend>canopen_interfaces</exec_depend>
+  <exec_depend>roburoc_canopen_interfaces</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

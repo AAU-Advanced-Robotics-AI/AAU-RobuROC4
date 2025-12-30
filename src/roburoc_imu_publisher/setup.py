@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'imu_publisher'
+package_name = 'roburoc_imu_publisher'
 
 setup(
     name=package_name,
@@ -20,7 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'imu_publisher = imu_publisher.imu_publisher_node:main'
+            'roburoc_imu_publisher = roburoc_imu_publisher.roburoc_imu_publisher_node:main'
         ],
     },
 )

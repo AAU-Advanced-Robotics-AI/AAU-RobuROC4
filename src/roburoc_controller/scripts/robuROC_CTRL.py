@@ -3,8 +3,8 @@ from sys import byteorder
 
 from utils.CTW import CTW
 from utils.COBID import COBID
-from canopen_interfaces.msg import CANWrite, CANSubscription
-from canopen_interfaces.srv import CANRead, CANConnection, CANPeriodicTask, CANSubscribe
+from roburoc_canopen_interfaces.msg import CANWrite, CANSubscription
+from roburoc_canopen_interfaces.srv import CANRead, CANConnection, CANPeriodicTask, CANSubscribe
 import rclpy
 import rclpy.subscription, logging, time
 from geometry_msgs.msg import Twist

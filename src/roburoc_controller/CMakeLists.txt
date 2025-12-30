@@ -12,7 +12,7 @@ endif()
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclpy REQUIRED)
-find_package(canopen_interfaces REQUIRED)
+find_package(roburoc_canopen_interfaces REQUIRED)
 find_package(roburoc_canopen REQUIRED)
 # find_package(roburoc_canopen)
 # uncomment the following section in order to fill in

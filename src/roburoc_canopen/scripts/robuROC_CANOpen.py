@@ -24,8 +24,8 @@ from canopen import SdoCommunicationError
 import rclpy
 from rclpy.node import Node
 from time import sleep
-from canopen_interfaces.msg import CANWrite, CANSubscription
-from canopen_interfaces.srv import CANRead, CANConnection, CANPeriodicTask, CANSubscribe
+from roburoc_canopen_interfaces.msg import CANWrite, CANSubscription
+from roburoc_canopen_interfaces.srv import CANRead, CANConnection, CANPeriodicTask, CANSubscribe
 
 # Set logging level and output files
 logging.basicConfig(level=logging.ERROR)

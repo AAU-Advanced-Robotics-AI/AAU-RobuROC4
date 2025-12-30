@@ -33,8 +33,8 @@ P9-RobuROC4/
 │   ├── roburoc_sim/         # Simulation and SLAM launch files, URDF models
 │   ├── roburoc_canopen/     # CANopen motor controller interface
 │   ├── roburoc_controller/  # Joystick/controller input handling
-│   ├── canopen_interfaces/  # Custom CANopen ROS messages/services
-│   ├── imu_publisher/       # IMU data publishing node
+│   ├── roburoc_canopen_interfaces/  # Custom CANopen ROS messages/services
+│   ├── roburoc_imu_publisher/       # IMU data publishing node
 │   └── thirdparty/          # External dependencies
 │       ├── realsense_gazebo_plugin/
 │       └── velodyne_simulator/

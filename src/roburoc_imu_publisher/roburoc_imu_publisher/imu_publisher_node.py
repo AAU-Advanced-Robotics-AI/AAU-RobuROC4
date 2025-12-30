@@ -11,7 +11,7 @@ Following documentation on sensor_msgs/Imu.msg in the ros docs.
 
 class IMUPublisherNode(Node):
     def __init__(self):
-        super().__init__('imu_publisher_node')
+        super().__init__('roburoc_imu_publisher_node')
         self.declare_parameter('serial_port', '/dev/ttyUSB0')  # Set your default serial port here
         self.declare_parameter('baud_rate', 115200)
 
@@ -74,9 +74,9 @@ class IMUPublisherNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    imu_publisher_node = IMUPublisherNode()
-    rclpy.spin(imu_publisher_node)
-    imu_publisher_node.destroy_node()
+    roburoc_imu_publisher_node = IMUPublisherNode()
+    rclpy.spin(roburoc_imu_publisher_node)
+    roburoc_imu_publisher_node.destroy_node()
     rclpy.shutdown()
 
 if __name__ == '__main__':

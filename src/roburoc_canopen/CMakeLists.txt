@@ -8,7 +8,7 @@ endif()
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclpy REQUIRED)
-find_package(canopen_interfaces REQUIRED)
+find_package(roburoc_canopen_interfaces REQUIRED)
 
 install(PROGRAMS
   scripts/robuROC_CANOpen.py
