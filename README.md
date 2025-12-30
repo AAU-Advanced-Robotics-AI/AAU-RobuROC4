@@ -57,14 +57,20 @@ Both configurations output a 3D occupancy grid map and robot pose estimates, vis
 ## Setup
 
 ### Prerequisites
-- ROS 2 (Humble/Iron)
+- ROS 2 (Humble/Iron/Jazzy)
 - Gazebo (for simulation)
 - RTAB-Map ROS packages
 - `teleop_twist_keyboard` (for simulation control)
 
 ### Running on Hardware
 
-1. **Build the workspace:**
+1. **Install dependencies:**
+   If you are using ROS 2 Jazzy (Ubuntu 24.04+), you may need to use the `PIP_BREAK_SYSTEM_PACKAGES=1` flag. This is required because newer OS versions mark the system Python environment as "externally managed" to prevent `pip` from conflicting with `apt`.
+   ```bash
+   PIP_BREAK_SYSTEM_PACKAGES=1 rosdep install -i --from-path src --rosdistro jazzy -y
+   ```
+
+2. **Build the workspace:**
    ```bash
    colcon build
    source install/setup.bash
