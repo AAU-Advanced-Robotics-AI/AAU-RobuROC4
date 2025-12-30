@@ -1,92 +1,127 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-    <!-- This is RobuROC model for gazebo simulation -->
+    <!-- This is RobuROC model for Gazebo Harmonic simulation -->
     <!-- Model visualisation and collision is made of simple shapes box and cylinders-->
 
-    <!-- All links get friction coefficients and as Gazebo don't read collors they specifeid again-->
+    <!-- All links get friction coefficients and visual materials for Gazebo Harmonic -->
     <gazebo reference="chassis_link">
-        <mu1> 0.2 </mu1>
-        <mu2> 0.2 </mu2>
-        <material>Gazebo/Grey</material>
+        <mu1>0.2</mu1>
+        <mu2>0.2</mu2>
+        <visual>
+            <material>
+                <ambient>0.5 0.5 0.5 1</ambient>
+                <diffuse>0.5 0.5 0.5 1</diffuse>
+                <specular>0.1 0.1 0.1 1</specular>
+            </material>
+        </visual>
     </gazebo>
 
     <gazebo reference="wheel_1_link">
-        <mu1> 0.2 </mu1>
-        <mu2> 0.2 </mu2>
-        <material>Gazebo/Black</material>
+        <mu1>0.8</mu1>
+        <mu2>0.8</mu2>
+        <visual>
+            <material>
+                <ambient>0.1 0.1 0.1 1</ambient>
+                <diffuse>0.1 0.1 0.1 1</diffuse>
+                <specular>0.1 0.1 0.1 1</specular>
+            </material>
+        </visual>
     </gazebo>
 
     <gazebo reference="wheel_2_link">
-        <mu1> 0.2 </mu1>
-        <mu2> 0.2 </mu2>
-        <material>Gazebo/Black</material>
+        <mu1>0.8</mu1>
+        <mu2>0.8</mu2>
+        <visual>
+            <material>
+                <ambient>0.1 0.1 0.1 1</ambient>
+                <diffuse>0.1 0.1 0.1 1</diffuse>
+                <specular>0.1 0.1 0.1 1</specular>
+            </material>
+        </visual>
     </gazebo>
 
     <gazebo reference="wheel_3_link">
-        <mu1> 0.2 </mu1>
-        <mu2> 0.2 </mu2>
-        <material>Gazebo/Black</material>
+        <mu1>0.8</mu1>
+        <mu2>0.8</mu2>
+        <visual>
+            <material>
+                <ambient>0.1 0.1 0.1 1</ambient>
+                <diffuse>0.1 0.1 0.1 1</diffuse>
+                <specular>0.1 0.1 0.1 1</specular>
+            </material>
+        </visual>
     </gazebo>
 
     <gazebo reference="wheel_4_link">
-        <mu1> 0.2 </mu1>
-        <mu2> 0.2 </mu2>
-        <material>Gazebo/Black</material>
+        <mu1>0.8</mu1>
+        <mu2>0.8</mu2>
+        <visual>
+            <material>
+                <ambient>0.1 0.1 0.1 1</ambient>
+                <diffuse>0.1 0.1 0.1 1</diffuse>
+                <specular>0.1 0.1 0.1 1</specular>
+            </material>
+        </visual>
     </gazebo>
 
     <gazebo reference="IMU_link">
-        <mu1> 0.2 </mu1>
-        <mu2> 0.2 </mu2>
-        <material>Gazebo/Red</material>
+        <mu1>0.2</mu1>
+        <mu2>0.2</mu2>
+        <visual>
+            <material>
+                <ambient>0.8 0.0 0.0 1</ambient>
+                <diffuse>0.8 0.0 0.0 1</diffuse>
+                <specular>0.1 0.1 0.1 1</specular>
+            </material>
+        </visual>
     </gazebo>
 
+    <!-- Gazebo Harmonic system plugins -->
     <gazebo>
-        <plugin name="joint_state_publisher" filename="libgazebo_ros_joint_state_publisher.so">
-            <jointName>wheel_1_joint,wheel_2_joint,wheel_3_joint,wheel_4_joint</jointName>
+        <!-- Joint State Publisher for Gazebo Harmonic -->
+        <plugin filename="gz-sim-joint-state-publisher-system" name="gz::sim::systems::JointStatePublisher">
+            <joint_name>wheel_1_joint</joint_name>
+            <joint_name>wheel_2_joint</joint_name>
+            <joint_name>wheel_3_joint</joint_name>
+            <joint_name>wheel_4_joint</joint_name>
+            <topic>joint_states</topic>
         </plugin>
     </gazebo>
+
 <!-- #################################################################################### -->
 <!--                                Differential drive                                    -->
 <!-- #################################################################################### -->
     <gazebo>
-        <!-- Gazebo plugin for differential drive -->
-        <plugin name="skid_steer_drive" filename="libgazebo_ros_diff_drive.so">
-            <ros>
-                <namespace> </namespace>
-            </ros>
-
-            <num_wheel_pairs>2</num_wheel_pairs>
-
-            <!-- Wheels 0 -->
+        <!-- Gazebo Harmonic differential drive plugin (skid-steer) -->
+        <plugin filename="gz-sim-diff-drive-system" name="gz::sim::systems::DiffDrive">
+            <!-- Wheels -->
             <left_joint>wheel_1_joint</left_joint>
-            <right_joint>wheel_2_joint</right_joint>
-        
-            <!-- Wheels 1 -->
             <left_joint>wheel_4_joint</left_joint>
+            <right_joint>wheel_2_joint</right_joint>
             <right_joint>wheel_3_joint</right_joint>
 
             <!-- Kinematics -->
             <wheel_separation>${box_y+cyl_l}</wheel_separation>
-            <wheel_separation>${box_y+cyl_l}</wheel_separation>
-
-            <wheel_diameter>${cyl_r*2}</wheel_diameter>
-            <wheel_diameter>${cyl_r*2}</wheel_diameter>
+            <wheel_radius>${cyl_r}</wheel_radius>
 
             <!-- Limits -->
             <max_wheel_torque>1000</max_wheel_torque>
             <max_wheel_acceleration>5.0</max_wheel_acceleration>
 
-            <!-- Output -->
+            <!-- Topics -->
+            <topic>cmd_vel</topic>
+            <odom_topic>odom</odom_topic>
+            <tf_topic>tf</tf_topic>
 
-            <publish_odom>false</publish_odom>
+            <!-- Frames -->
+            <frame_id>odom</frame_id>
+            <child_frame_id>base_link</child_frame_id>
+
+            <!-- Output control -->
+            <publish_odom>true</publish_odom>
             <publish_odom_tf>false</publish_odom_tf>
             <publish_wheel_tf>false</publish_wheel_tf>
-
-            <!-- <odometry_frame>odom</odometry_frame> -->
-            <!-- <robot_base_frame>base_link</robot_base_frame> -->
-
-    
         </plugin>
     </gazebo>
 

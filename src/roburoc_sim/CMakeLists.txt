@@ -11,10 +11,9 @@ find_package(ament_cmake_python REQUIRED)
 
 find_package(realsense2_description REQUIRED)
 find_package(realsense2_camera REQUIRED)
-find_package(gazebo_msgs)
+find_package(ros_gz_sim REQUIRED)
+find_package(ros_gz_bridge REQUIRED)
 find_package(velodyne_description)
-find_package(velodyne_gazebo_plugins)
-find_package(realsense_gazebo_plugin)
 # ...
 ament_python_install_package(${PROJECT_NAME})
 # uncomment the following section in order to fill in
