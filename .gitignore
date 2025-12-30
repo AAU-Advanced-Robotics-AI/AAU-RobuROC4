@@ -250,7 +250,7 @@ ipch/
 *.ncb
 *.opendb
 *.opensdf
-*.sdf
+# *.sdf  # This is also a Gazebo world file, so commenting this line out
 *.cachefile
 *.VC.db
 *.VC.VC.opendb

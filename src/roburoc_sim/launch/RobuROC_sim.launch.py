@@ -224,9 +224,8 @@ def generate_launch_description():
             # Remap camera depth images to expected names
             ('/camera1/depth_image', '/camera1/depth'),
             ('/camera2/depth_image', '/camera2/depth'),
-            # Remap camera points to legacy topic names (for RViz config compatibility)
-            ('/camera1/points', '/camera1/camera1/depth/color/points'),
-            ('/camera2/points', '/camera2/camera2/depth/color/points'),
+            # Camera points stay on simple names: /camera1/points, /camera2/points
+            # Update RViz to subscribe to these topics
         ],
         output='screen'
     )
