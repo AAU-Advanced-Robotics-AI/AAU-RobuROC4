@@ -17,20 +17,20 @@ def generate_launch_description():
 
     # Specify the name of the package and path to xacro file within the package
     namePackage = 'roburoc_sim'
+    descriptionPackage = 'roburoc_description'
     RTABPackage = 'rtabmap_launch'
     d435Package = 'realsense2_camera'             
     PointcloudPackage = 'velodyne_pointcloud'
     VelDriverPackage = 'velodyne_driver'
     # Path to rviz config
-    my_base_path = 'src/roburoc_sim/src/rviz'   #path to all config files
-    my_rviz_path = my_base_path+'/RobuROC_vis.rviz'       #config file for rviz
+    my_rviz_path = os.path.join(get_package_share_directory('roburoc_sim'), 'rviz', 'RobuROC_vis.rviz')       #config file for rviz
 
     # Use xacro to process the file
     # xacro_file = os.path.join(get_package_share_directory(namePackage),file_subpath)
     # robot_description_raw = xacro.process_file(xacro_file).toxml()
 
 
-    modelFileRelativePath = 'description/RobuROC_model.urdf.xacro'
+    modelFileRelativePath = 'urdf/RobuROC_model.urdf.xacro'
 
     # worldFileRelativePath = 'worlds/RobuROC_env.world'
     worldFileRelativePath = 'worlds/empty_world.world'
@@ -39,7 +39,7 @@ def generate_launch_description():
 
     pkg_project = get_package_share_directory(namePackage)
 
-    pathModelFile = os.path.join(get_package_share_directory(namePackage),modelFileRelativePath)
+    pathModelFile = os.path.join(get_package_share_directory(descriptionPackage),modelFileRelativePath)
 
     pathWolrdFile = os.path.join(get_package_share_directory(namePackage),worldFileRelativePath)
 

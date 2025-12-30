@@ -30,7 +30,8 @@ This repository contains ROS 2 packages for operating and simulating the RobuROC
 ```
 P9-RobuROC4/
 ├── src/
-│   ├── roburoc_sim/         # Simulation and SLAM launch files, URDF models
+│   ├── roburoc_description/      # Robot URDF, meshes, and RViz config
+│   ├── roburoc_sim/              # Simulation and SLAM launch files
 │   ├── roburoc_canopen/     # CANopen motor controller interface
 │   ├── roburoc_controller/  # Joystick/controller input handling
 │   ├── roburoc_canopen_interfaces/  # Custom CANopen ROS messages/services

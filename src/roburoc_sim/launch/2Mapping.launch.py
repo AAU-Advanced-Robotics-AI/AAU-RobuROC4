@@ -16,17 +16,17 @@ def generate_launch_description():
     robotXacroName = 'RobuROC'  # Must have same name as in xacro file
 
     # Specify the name of the package and path to xacro file within the package
-    namePackage = 'roburoc_sim'            
+    namePackage = 'roburoc_sim'
+    descriptionPackage = 'roburoc_description'            
     PointcloudPackage = 'velodyne_pointcloud'
     VelDriverPackage = 'velodyne_driver'
 
     # Path to rviz config
-    my_base_path = 'src/roburoc_sim/src/rviz'   #path to all config files
-    my_rviz_path = my_base_path+'/RobuROC_vis.rviz'       #config file for rviz
+    my_rviz_path = os.path.join(get_package_share_directory('roburoc_sim'), 'rviz', 'RobuROC_vis.rviz')       #config file for rviz
 
     # Path to model description
-    modelFileRelativePath = 'description/RobuROC_model.urdf.xacro'
-    pathModelFile = os.path.join(get_package_share_directory(namePackage),modelFileRelativePath)
+    modelFileRelativePath = 'urdf/RobuROC_model.urdf.xacro'
+    pathModelFile = os.path.join(get_package_share_directory(descriptionPackage),modelFileRelativePath)
     robotDescription = xacro.process_file(pathModelFile).toxml()
 
 

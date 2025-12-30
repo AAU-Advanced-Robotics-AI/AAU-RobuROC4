@@ -34,7 +34,7 @@ if(BUILD_TESTING)
 endif()
 
 install(
-  DIRECTORY description launch worlds meshes scripts
+  DIRECTORY launch worlds config scripts rviz
   DESTINATION share/${PROJECT_NAME}
 )
 
