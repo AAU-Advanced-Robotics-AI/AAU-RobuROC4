@@ -1,5 +1,7 @@
 # RobuROC4 - Autonomous Mobile Robot Platform
 
+[![ROS 2 Build](https://github.com/simonbogh/P9-RobuROC4/actions/workflows/build.yaml/badge.svg)](https://github.com/simonbogh/P9-RobuROC4/actions/workflows/build.yaml)
+
 ROS 2 software stack for the RobuROC4 robotic platform, featuring SLAM, CANopen motor control, and simulation capabilities.
 
 ## Table of Contents
