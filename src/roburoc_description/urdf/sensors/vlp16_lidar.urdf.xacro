@@ -1,0 +1,143 @@
+<?xml version="1.0"?>
+<!--
+  vlp16_lidar.urdf.xacro - Velodyne VLP-16 Lidar
+  
+  This file defines a reusable VLP-16 macro and instantiates it on the robot.
+  The lidar is mounted on top of the robot chassis.
+  
+  Macro parameters:
+    - parent: Parent link to attach to (default: base_link)
+    - name: Link name prefix (default: velodyne)
+    - topic: Point cloud topic (default: /velodyne_points)
+    - hz: Update rate (default: 10)
+    - lasers: Number of vertical beams (default: 16)
+    - samples: Horizontal samples per rotation (default: 1875)
+    - min_range/max_range: Detection range (default: 0.9-130.0m)
+    
+  Sensor specifications:
+    - 16 laser beams
+    - 360° horizontal FOV
+    - ±15° vertical FOV
+    - Up to 130m range
+    
+  Dependencies:
+    - common/properties.xacro (for lidar_origin)
+    - Meshes: VLP16_base_1.dae, VLP16_base_2.dae, VLP16_scan.dae
+-->
+<robot xmlns:xacro="http://ros.org/wiki/xacro" name="VLP-16">
+
+    <xacro:property name="M_PI" value="3.1415926535897931"/>
+    
+    <!-- GPU acceleration argument -->
+    <xacro:arg name="gpu" default="false"/>
+    <xacro:property name="gpu" value="$(arg gpu)" />
+
+    <!-- ############################################## -->
+    <!--             VLP-16 Macro Definition           -->
+    <!-- ############################################## -->
+    <xacro:macro name="VLP-16" params="*origin parent:=base_link name:=velodyne topic:=/velodyne_points hz:=10 lasers:=16 samples:=1875 collision_range:=0.3 min_range:=0.9 max_range:=130.0 noise:=0.008 min_angle:=-${M_PI} max_angle:=${M_PI} gpu:=true">
+
+        <!-- Base mount joint -->
+        <joint name="${name}_base_mount_joint" type="fixed">
+            <xacro:insert_block name="origin"/>
+            <parent link="${parent}"/>
+            <child link="${name}_base_link"/>
+        </joint>
+
+        <!-- Base link with visual mesh -->
+        <link name="${name}_base_link">
+            <inertial>
+                <mass value="0.83"/>
+                <origin xyz="0 0 0.03585"/>
+                <inertia ixx="${(0.83 * (3.0*0.0516*0.0516 + 0.0717*0.0717)) / 12.0}" ixy="0" ixz="0" 
+                         iyy="${(0.83 * (3.0*0.0516*0.0516 + 0.0717*0.0717)) / 12.0}" iyz="0" 
+                         izz="${0.5 * 0.83 * (0.0516*0.0516)}"/>
+            </inertial>
+            <visual>
+                <geometry>
+                    <mesh filename="file://$(find roburoc_description)/meshes/VLP16_base_1.dae"/>
+                </geometry>
+            </visual>
+            <visual>
+                <geometry>
+                    <mesh filename="file://$(find roburoc_description)/meshes/VLP16_base_2.dae"/>
+                </geometry>
+            </visual>
+            <collision>
+                <origin rpy="0 0 0" xyz="0 0 0.03585"/>
+                <geometry>
+                    <cylinder radius="0.0516" length="0.0717"/>
+                </geometry>
+            </collision>
+        </link>
+
+        <!-- Scan head joint -->
+        <joint name="${name}_base_scan_joint" type="fixed">
+            <origin xyz="0 0 0.0377" rpy="0 0 0"/>
+            <parent link="${name}_base_link"/>
+            <child link="${name}"/>
+        </joint>
+
+        <!-- Scan head link (sensor reference frame) -->
+        <link name="${name}">
+            <inertial>
+                <mass value="0.01"/>
+                <origin xyz="0 0 0"/>
+                <inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/>
+            </inertial>
+            <visual>
+                <origin xyz="0 0 -0.0377"/>
+                <geometry>
+                    <mesh filename="file://$(find roburoc_description)/meshes/VLP16_scan.dae"/>
+                </geometry>
+            </visual>
+        </link>
+
+        <!-- Gazebo Harmonic GPU Lidar sensor -->
+        <gazebo reference="${name}">
+            <sensor name="${name}-VLP16" type="gpu_lidar">
+                <pose>0 0 0 0 0 0</pose>
+                <visualize>false</visualize>
+                <update_rate>${hz}</update_rate>
+                <always_on>true</always_on>
+                <topic>${topic}</topic>
+                <gz_frame_id>${name}</gz_frame_id>
+                <lidar>
+                    <scan>
+                        <horizontal>
+                            <samples>${samples}</samples>
+                            <resolution>1</resolution>
+                            <min_angle>${min_angle}</min_angle>
+                            <max_angle>${max_angle}</max_angle>
+                        </horizontal>
+                        <vertical>
+                            <samples>${lasers}</samples>
+                            <resolution>1</resolution>
+                            <min_angle>-${15.0*M_PI/180.0}</min_angle>
+                            <max_angle>${15.0*M_PI/180.0}</max_angle>
+                        </vertical>
+                    </scan>
+                    <range>
+                        <min>${min_range}</min>
+                        <max>${max_range}</max>
+                        <resolution>0.001</resolution>
+                    </range>
+                    <noise>
+                        <type>gaussian</type>
+                        <mean>0.0</mean>
+                        <stddev>${noise}</stddev>
+                    </noise>
+                </lidar>
+            </sensor>
+        </gazebo>
+
+    </xacro:macro>
+
+    <!-- ############################################## -->
+    <!--           VLP-16 Instantiation                -->
+    <!-- ############################################## -->
+    <xacro:VLP-16 parent="base_link" name="velodyne" topic="/velodyne_points" hz="10" samples="440" gpu="${gpu}">
+        <origin xyz="${lidar_origin}" rpy="0 0 0" />
+    </xacro:VLP-16>
+
+</robot>

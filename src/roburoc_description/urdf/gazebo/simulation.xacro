@@ -1,10 +1,32 @@
 <?xml version="1.0"?>
+<!--
+  simulation.xacro - Gazebo Harmonic Simulation Configuration
+  
+  This file configures Gazebo-specific properties for the robot:
+    - Friction coefficients (mu1, mu2) for physics simulation
+    - Visual materials for Gazebo rendering
+    - Joint state publisher plugin
+    - Differential drive plugin (skid-steer configuration)
+    
+  Note: This file does NOT include sensor simulation - those are
+  defined alongside their respective sensors in the sensors/ directory.
+  
+  Plugins:
+    - gz-sim-joint-state-publisher-system: Publishes wheel joint states
+    - gz-sim-diff-drive-system: Skid-steer drive controller
+    
+  Topics:
+    - /joint_states: Wheel positions
+    - /cmd_vel: Velocity commands (input)
+    - /odom: Odometry (output)
+-->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-    <!-- This is RobuROC model for Gazebo Harmonic simulation -->
-    <!-- Model visualisation and collision is made of simple shapes box and cylinders-->
-
-    <!-- All links get friction coefficients and visual materials for Gazebo Harmonic -->
+    <!-- ############################################## -->
+    <!--              Link Friction/Materials          -->
+    <!-- ############################################## -->
+    
+    <!-- Chassis: Low friction (slides if pushed) -->
     <gazebo reference="chassis_link">
         <mu1>0.2</mu1>
         <mu2>0.2</mu2>
@@ -17,6 +39,7 @@
         </visual>
     </gazebo>
 
+    <!-- Wheels: High friction for traction -->
     <gazebo reference="wheel_1_link">
         <mu1>0.8</mu1>
         <mu2>0.8</mu2>
@@ -65,6 +88,7 @@
         </visual>
     </gazebo>
 
+    <!-- IMU: Low friction, red visual -->
     <gazebo reference="IMU_link">
         <mu1>0.2</mu1>
         <mu2>0.2</mu2>
@@ -77,9 +101,12 @@
         </visual>
     </gazebo>
 
-    <!-- Gazebo Harmonic system plugins -->
+    <!-- ############################################## -->
+    <!--              System Plugins                   -->
+    <!-- ############################################## -->
+    
+    <!-- Joint State Publisher -->
     <gazebo>
-        <!-- Joint State Publisher for Gazebo Harmonic -->
         <plugin filename="gz-sim-joint-state-publisher-system" name="gz::sim::systems::JointStatePublisher">
             <joint_name>wheel_1_joint</joint_name>
             <joint_name>wheel_2_joint</joint_name>
@@ -89,13 +116,12 @@
         </plugin>
     </gazebo>
 
-<!-- #################################################################################### -->
-<!--                                Differential drive                                    -->
-<!-- #################################################################################### -->
+    <!-- ############################################## -->
+    <!--           Differential Drive (Skid-Steer)     -->
+    <!-- ############################################## -->
     <gazebo>
-        <!-- Gazebo Harmonic differential drive plugin (skid-steer) -->
         <plugin filename="gz-sim-diff-drive-system" name="gz::sim::systems::DiffDrive">
-            <!-- Wheels -->
+            <!-- Wheel configuration (skid-steer: 2 left, 2 right) -->
             <left_joint>wheel_1_joint</left_joint>
             <left_joint>wheel_4_joint</left_joint>
             <right_joint>wheel_2_joint</right_joint>

@@ -1,16 +1,38 @@
 <?xml version="1.0"?>
-<robot xmlns:xacro="http://www.ros.org/wiki/xacro"  name="RobuROC">
-
-    <!-- This is RobuROC model for rviz visualisation -->
-    <!-- Model visualisation is made of stl files and collison is made of simple shapes box and cylinders-->
-
-
+<!--
+  chassis_and_wheels.xacro - RobuROC Base Platform
+  
+  This file defines the core robot structure:
+    - base_link: Empty root link (ROS convention)
+    - base_footprint: Ground-level link for SLAM
+    - chassis_link: Main robot body with STL mesh
+    - wheel_1-4_links: Four wheels (continuous joints)
+    
+  Coordinate frame:
+    - X: Forward
+    - Y: Left  
+    - Z: Up
+    
+  Wheel numbering (top view):
+    1 (+x,+y) ---- 2 (+x,-y)
+        |   FRONT   |
+        |           |
+    4 (-x,+y) ---- 3 (-x,-y)
+    
+  Dependencies:
+    - common/properties.xacro (dimensions)
+    - common/materials.xacro (colors)
+    - common/inertia_macros.xacro (inertia calculations)
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="RobuROC">
 
     <!-- Initial link is empty link called base_link -->
     <link name="base_link"></link>
 
-    <!-- BASE_FOOTPRINT LINK -->
-    <!-- link for SLAM -->
+    <!-- ############################################## -->
+    <!--              BASE_FOOTPRINT LINK              -->
+    <!-- ############################################## -->
+    <!-- Ground-level link for SLAM algorithms -->
     <joint name="base_footprint_joint" type="fixed">
         <parent link="base_link"/>
         <child link="base_footprint"/>
@@ -20,11 +42,9 @@
     <link name="base_footprint">
     </link>
 
-    <!-- ##############################################  -->
-    <!--                Chassis Link                     -->
-    <!-- ##############################################  -->
-
-    <!-- Chassis joint has been off seted in z axis and set to fixed-->
+    <!-- ############################################## -->
+    <!--                Chassis Link                   -->
+    <!-- ############################################## -->
     <joint name="chassis_joint" type="fixed">
         <parent link="base_link"/>
         <child link="chassis_link"/>        
@@ -49,10 +69,9 @@
         </xacro:inertial_box>
     </link>
 
-    <!-- ##############################################  -->
-    <!--                WHEEL 1  +x +y                   -->
-    <!-- ##############################################  -->
-
+    <!-- ############################################## -->
+    <!--                WHEEL 1  +x +y                 -->
+    <!-- ############################################## -->
     <joint name="wheel_1_joint" type="continuous">
         <origin xyz="${wheel_1_origin}" rpy="${-rot_90} 0 0"/>
         <parent link="base_link"/>
@@ -81,10 +100,9 @@
         </xacro:inertial_cylinder>
     </link>
 
-    <!-- ##############################################  -->
-    <!--                WHEEL 2  +x -y                   -->
-    <!-- ##############################################  -->
-
+    <!-- ############################################## -->
+    <!--                WHEEL 2  +x -y                 -->
+    <!-- ############################################## -->
     <joint name="wheel_2_joint" type="continuous">
         <origin xyz="${wheel_2_origin}" rpy="${-rot_90} 0 0"/>
         <parent link="base_link"/>
@@ -113,10 +131,9 @@
         </xacro:inertial_cylinder>
     </link>
 
-    <!-- ##############################################  -->
-    <!--                WHEEL 3  -x -y                   -->
-    <!-- ##############################################  -->
-
+    <!-- ############################################## -->
+    <!--                WHEEL 3  -x -y                 -->
+    <!-- ############################################## -->
     <joint name="wheel_3_joint" type="continuous">
         <origin xyz="${wheel_3_origin}" rpy="${-rot_90} 0 0"/>
         <parent link="base_link"/>
@@ -145,10 +162,9 @@
         </xacro:inertial_cylinder>
     </link>
 
-    <!-- ##############################################  -->
-    <!--                WHEEL 4  -x +y                   -->
-    <!-- ##############################################  -->
-
+    <!-- ############################################## -->
+    <!--                WHEEL 4  -x +y                 -->
+    <!-- ############################################## -->
     <joint name="wheel_4_joint" type="continuous">
         <origin xyz="${wheel_4_origin}" rpy="${-rot_90} 0 0"/>
         <parent link="base_link"/>
@@ -176,6 +192,5 @@
             <origin xyz="0 0 0" rpy="0 0 0"/>
         </xacro:inertial_cylinder>
     </link>
-
 
 </robot>
