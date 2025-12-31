@@ -9,7 +9,7 @@
     urdf/
     ├── roburoc.urdf.xacro         <- You are here
     ├── common/
-    │   ├── properties.xacro       - Robot dimensions & positions
+    │   ├── properties.xacro       - Robot dimensions and positions
     │   ├── materials.xacro        - URDF color definitions
     │   └── inertia_macros.xacro   - Inertia calculation helpers
     ├── base/
@@ -19,7 +19,7 @@
     │   ├── d435_camera.gazebo.xacro - D435 Gazebo sensor
     │   └── vlp16_lidar.urdf.xacro   - Velodyne VLP-16 lidar
     └── gazebo/
-        └── simulation.xacro       - Gazebo physics & drive plugins
+        └── simulation.xacro       - Gazebo physics and drive plugins
         
   Usage:
     # Generate URDF:
