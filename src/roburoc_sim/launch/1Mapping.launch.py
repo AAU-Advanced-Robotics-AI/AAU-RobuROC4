@@ -25,7 +25,7 @@ def generate_launch_description():
 
 
     # Path to model descriptiom
-    modelFileRelativePath = 'urdf/RobuROC_model.urdf.xacro'
+    modelFileRelativePath = 'urdf/roburoc.urdf.xacro'
     pathModelFile = os.path.join(get_package_share_directory(descriptionPackage),modelFileRelativePath)
     robotDescription = xacro.process_file(pathModelFile).toxml()
 

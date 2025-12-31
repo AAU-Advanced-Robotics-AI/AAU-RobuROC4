@@ -25,7 +25,7 @@ def generate_launch_description():
     my_rviz_path = os.path.join(get_package_share_directory('roburoc_sim'), 'rviz', 'RobuROC_vis.rviz')       #config file for rviz
 
     # Path to model description
-    modelFileRelativePath = 'urdf/RobuROC_model.urdf.xacro'
+    modelFileRelativePath = 'urdf/roburoc.urdf.xacro'
     pathModelFile = os.path.join(get_package_share_directory(descriptionPackage),modelFileRelativePath)
     robotDescription = xacro.process_file(pathModelFile).toxml()
 

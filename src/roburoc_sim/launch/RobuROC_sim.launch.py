@@ -22,7 +22,7 @@ def generate_launch_description():
     # Path to rviz config
     my_rviz_path = os.path.join(get_package_share_directory('roburoc_sim'), 'rviz', 'RobuROC_vis.rviz')       #config file for rviz
 
-    modelFileRelativePath = 'urdf/RobuROC_model.urdf.xacro'
+    modelFileRelativePath = 'urdf/roburoc.urdf.xacro'
 
     # World file for Gazebo Harmonic (SDF format)
     worldFileRelativePath = 'worlds/empty_world.sdf'
