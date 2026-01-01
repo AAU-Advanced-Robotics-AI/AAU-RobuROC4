@@ -1,0 +1,36 @@
+# RTAB-Map parameters for Gazebo simulation
+# Single RGB-D camera configuration (camera1/front)
+
+/**:
+  ros__parameters:
+    use_sim_time: true
+
+rtabmap:
+  ros__parameters:
+    # Frame configuration
+    frame_id: base_link
+    odom_frame_id: odom
+    map_frame_id: map
+    
+    # Simulation time
+    use_sim_time: true
+    
+    # Subscription settings
+    subscribe_depth: true
+    subscribe_rgb: true
+    subscribe_odom_info: true
+    approx_sync: true
+    queue_size: 30
+    
+    # RTAB-Map parameters
+    Mem/IncrementalMemory: "true"
+    Mem/STMSize: "30"
+    
+    # Visual features
+    Vis/MinInliers: "15"
+    Vis/InlierDistance: "0.1"
+    
+    # Grid map
+    Grid/FromDepth: "true"
+    Grid/MaxGroundHeight: "0.1"
+    Grid/MaxObstacleHeight: "2.0"
