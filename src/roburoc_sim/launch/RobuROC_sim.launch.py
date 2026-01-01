@@ -1,3 +1,17 @@
+"""
+RobuROC Gazebo Simulation Launch File
+
+Launches the RobuROC robot in Gazebo Harmonic simulation with:
+  - Gazebo world (empty_world.sdf)
+  - Robot model spawning
+  - ROS-Gazebo bridge for topics (cmd_vel, odom, sensors, etc.)
+  - Robot state publisher
+  - RViz visualization
+
+Usage:
+    ros2 launch roburoc_sim RobuROC_sim.launch.py
+"""
+
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -10,32 +24,35 @@ import xacro
 
 def generate_launch_description():
 
+    # =========================================================================
+    # Configuration
+    # =========================================================================
     robotXacroName = 'RobuROC'  # Must have same name as in xacro file
 
-    # Specify the name of the package and path to xacro file within the package
+    # Package names
     namePackage = 'roburoc_sim'
     descriptionPackage = 'roburoc_description'
     # RTABPackage = 'rtabmap_launch'  # Uncomment when using RTAB-Map
     # d435Package = 'realsense2_camera'  # Uncomment when using real cameras
     # PointcloudPackage = 'velodyne_pointcloud'  # Not needed for simulation
     # VelDriverPackage = 'velodyne_driver'  # Not needed for simulation
-    # Path to rviz config
-    my_rviz_path = os.path.join(get_package_share_directory('roburoc_sim'), 'rviz', 'RobuROC_vis.rviz')       #config file for rviz
 
+    # File paths
     modelFileRelativePath = 'urdf/roburoc.urdf.xacro'
+    worldFileRelativePath = 'worlds/empty_world.sdf'  # Gazebo Harmonic SDF format
 
-    # World file for Gazebo Harmonic (SDF format)
-    worldFileRelativePath = 'worlds/empty_world.sdf'
-
+    # Resolve paths
     pkg_project = get_package_share_directory(namePackage)
-
     pathModelFile = os.path.join(get_package_share_directory(descriptionPackage), modelFileRelativePath)
-
     pathWorldFile = os.path.join(get_package_share_directory(namePackage), worldFileRelativePath)
+    my_rviz_path = os.path.join(get_package_share_directory('roburoc_sim'), 'rviz', 'RobuROC_vis.rviz')
 
+    # Process robot description from xacro
     robotDescription = xacro.process_file(pathModelFile).toxml()
 
-    # Gazebo Harmonic launch using ros_gz_sim
+    # =========================================================================
+    # Gazebo Simulation
+    # =========================================================================
     gz_sim_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(get_package_share_directory('ros_gz_sim'), 'launch', 'gz_sim.launch.py')
@@ -58,141 +75,167 @@ def generate_launch_description():
         output='screen'
     )
 
+    # =========================================================================
+    # ROS Nodes
+    # =========================================================================
     node_robot_state_publisher = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',
-        # output='screen',
         output='screen',
-        parameters=[{'robot_description':robotDescription,
-        'use_sim_time': True}] # add other parameters here if required
+        parameters=[{
+            'robot_description': robotDescription,
+            'use_sim_time': True
+        }]
     )
+
     # NOTE: joint_state_publisher is NOT used in simulation because Gazebo
     # publishes joint states via the ros_gz_bridge. Using both causes conflicts.
     # joint_state_publisher = Node(
     #     package='joint_state_publisher',
     #     executable='joint_state_publisher',
     #     output='screen',
-    # )    
+    # )
+
     # joint_state_publisher_gui = Node(
-        # package='joint_state_publisher_gui',
-        # executable='joint_state_publisher_gui',
-        # output='screen', # add other parameters here if required
-    # )  
+    #     package='joint_state_publisher_gui',
+    #     executable='joint_state_publisher_gui',
+    #     output='screen',
+    # )
+
     rviz = Node(
-            package='rviz2',
-            # namespace='',
-            executable='rviz2',
-            name='rviz2',
-            output='screen',
-            arguments=['-d', str(my_rviz_path)]
+        package='rviz2',
+        executable='rviz2',
+        name='rviz2',
+        output='screen',
+        arguments=['-d', str(my_rviz_path)]
     )
 
+    # =========================================================================
+    # Optional Launch Includes (not currently used in LaunchDescription)
+    # =========================================================================
     LIDAR = IncludeLaunchDescription(
-            PythonLaunchDescriptionSource([os.path.join(
-                get_package_share_directory(namePackage),'launch','vel_16.launch.py'
-            )]), launch_arguments={'use_sim_time':'false',
-                                  'deskewing':'false'}.items()
+        PythonLaunchDescriptionSource([
+            os.path.join(get_package_share_directory(namePackage), 'launch', 'vel_16.launch.py')
+        ]),
+        launch_arguments={
+            'use_sim_time': 'false',
+            'deskewing': 'false'
+        }.items()
     )
-
-
-
-
 
     camera_1 = IncludeLaunchDescription(
-            PythonLaunchDescriptionSource([os.path.join(
-                get_package_share_directory(namePackage),'launch','camera_1.launch.py'       # trying new rtab lf
-            )])
+        PythonLaunchDescriptionSource([
+            os.path.join(get_package_share_directory(namePackage), 'launch', 'camera_1.launch.py')
+        ])
     )
-
 
     realsense_dual = IncludeLaunchDescription(
-            PythonLaunchDescriptionSource([os.path.join(
-                get_package_share_directory(namePackage),'launch','dual_camera.launch.py'
-            )]), launch_arguments={'serial_no1':"'034422070675'",
-                                   'camera_name':'camera1',
-                                   'camera_namespace':'camera1',
-                                   'serial_no2':"'829212072207'",
-                                   'camera_name':'camera2',
-                                   'camera_namespace':'camera2'}.items()
-
-    
+        PythonLaunchDescriptionSource([
+            os.path.join(get_package_share_directory(namePackage), 'launch', 'dual_camera.launch.py')
+        ]),
+        launch_arguments={
+            'serial_no1': "'034422070675'",
+            'camera_name': 'camera1',
+            'camera_namespace': 'camera1',
+            'serial_no2': "'829212072207'",
+            'camera_name': 'camera2',
+            'camera_namespace': 'camera2'
+        }.items()
     )
-    #                                 # 'tf.translation.x':'-1.2',
-    #                                 # 'tf.translation.y':'0.075',
-    #                                 # 'tf.translation.z':'-0.4',
-    #                                 # 'tf.rotation.yaw':'-180',
-    #                                 # 'tf.rotation.pitch':'31.0',
-    #                                 # 'tf.rotation.roll':'1.0'
+    # Old TF calibration values:
+    # 'tf.translation.x': '-1.2',
+    # 'tf.translation.y': '0.075',
+    # 'tf.translation.z': '-0.4',
+    # 'tf.rotation.yaw': '-180',
+    # 'tf.rotation.pitch': '31.0',
+    # 'tf.rotation.roll': '1.0'
 
-    # Velodyne pointcloud and driver - only for real hardware, not simulation
+    # =========================================================================
+    # Velodyne (Real Hardware Only)
+    # =========================================================================
     # Pointcloud = IncludeLaunchDescription(
-    #         PythonLaunchDescriptionSource([os.path.join(
-    #             get_package_share_directory('velodyne_pointcloud'),'launch','velodyne_transform_node-VLP16-launch.py'
-    #         )])
+    #     PythonLaunchDescriptionSource([
+    #         os.path.join(get_package_share_directory('velodyne_pointcloud'),
+    #                      'launch', 'velodyne_transform_node-VLP16-launch.py')
+    #     ])
     # )
 
     # VelDriver = IncludeLaunchDescription(
-    #         PythonLaunchDescriptionSource([os.path.join(
-    #             get_package_share_directory('velodyne_driver'),'launch','velodyne_driver_node-VLP16-launch.py'
-    #         )]),launch_arguments={}.items()
-    # )    
+    #     PythonLaunchDescriptionSource([
+    #         os.path.join(get_package_share_directory('velodyne_driver'),
+    #                      'launch', 'velodyne_driver_node-VLP16-launch.py')
+    #     ]),
+    #     launch_arguments={}.items()
+    # )
 
-    # RTAB-Map visualization - uncomment when rtabmap packages are installed
+    # =========================================================================
+    # RTAB-Map (Uncomment when rtabmap packages are installed)
+    # =========================================================================
     # rtab_vis = Node(
-    #         package='rtabmap_viz', executable='rtabmap_viz', output='screen',
-    #         parameters=[{
-    #       'frame_id':'camera_link',
-    #       'subscribe_depth':False,
-    #       'subscribe_rgbd': True,
-    #       'subscribe_odom_info':True,
-    #       'rgbd_cameras': 2,
-    #       'approx_sync':False}],
-    #         remappings=[
-    #             ("rgbd_image0", '/camera1/rgbd_image'),
-    #             ("rgbd_image1", '/camera2/rgbd_image'),
-    #       ]
-    #       )
+    #     package='rtabmap_viz',
+    #     executable='rtabmap_viz',
+    #     output='screen',
+    #     parameters=[{
+    #         'frame_id': 'camera_link',
+    #         'subscribe_depth': False,
+    #         'subscribe_rgbd': True,
+    #         'subscribe_odom_info': True,
+    #         'rgbd_cameras': 2,
+    #         'approx_sync': False
+    #     }],
+    #     remappings=[
+    #         ("rgbd_image0", '/camera1/rgbd_image'),
+    #         ("rgbd_image1", '/camera2/rgbd_image'),
+    #     ]
+    # )
 
-
-    # RTAB-Map launch configurations - uncomment when rtabmap_launch package is installed
-    # realsense_rtab  = IncludeLaunchDescription(
-    #         PythonLaunchDescriptionSource([os.path.join(
-    #             get_package_share_directory('rtabmap_launch'),'launch','rtabmap.launch.py'
-    #         )]), launch_arguments={'rtabmap_args':"--delete_db_on_start",
-    #                                'rgb_topic':'camera1/camera1/color/image_raw',
-    #                                'depth_topic':'camera1/camera1/depth/image_rect_raw',
-    #                                'camera_info':"camera1/camera1/color/camera_info",
-    #                                'frame_id':'camera1_link',
-    #                                'use_sim_time':'true',
-    #                                'approx_sync':'true',
-    #                                'qos':'2',
-    #                                'queue_size':'30'}.items()
+    # realsense_rtab = IncludeLaunchDescription(
+    #     PythonLaunchDescriptionSource([
+    #         os.path.join(get_package_share_directory('rtabmap_launch'),
+    #                      'launch', 'rtabmap.launch.py')
+    #     ]),
+    #     launch_arguments={
+    #         'rtabmap_args': "--delete_db_on_start",
+    #         'rgb_topic': 'camera1/camera1/color/image_raw',
+    #         'depth_topic': 'camera1/camera1/depth/image_rect_raw',
+    #         'camera_info': "camera1/camera1/color/camera_info",
+    #         'frame_id': 'camera1_link',
+    #         'use_sim_time': 'true',
+    #         'approx_sync': 'true',
+    #         'qos': '2',
+    #         'queue_size': '30'
+    #     }.items()
     # )
 
     rtab_lidar_rgbd = IncludeLaunchDescription(
-            PythonLaunchDescriptionSource([os.path.join(
-                get_package_share_directory(namePackage),'launch','rtab_lidar_rgbd.launch.py'
-            )])
+        PythonLaunchDescriptionSource([
+            os.path.join(get_package_share_directory(namePackage), 'launch', 'rtab_lidar_rgbd.launch.py')
+        ])
     )
+
     rtab_dual_rgbd = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([os.path.join(
-            get_package_share_directory(namePackage), 'launch', 'rtab_dual_rgbd.launch.py'
-        )])
+        PythonLaunchDescriptionSource([
+            os.path.join(get_package_share_directory(namePackage), 'launch', 'rtab_dual_rgbd.launch.py')
+        ])
     )
+
     rtab_dual_simple = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([os.path.join(
-            get_package_share_directory(namePackage), 'launch', 'rtab_dual_simple.launch.py'
-        )]),
+        PythonLaunchDescriptionSource([
+            os.path.join(get_package_share_directory(namePackage), 'launch', 'rtab_dual_simple.launch.py')
+        ]),
     )
 
     two_rgbd_and_lidar = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([os.path.join(
-            get_package_share_directory(namePackage), 'launch', '2rgbd_lidar.launch.py'
-        )]),
+        PythonLaunchDescriptionSource([
+            os.path.join(get_package_share_directory(namePackage), 'launch', '2rgbd_lidar.launch.py')
+        ]),
     )
 
-    # ROS-Gazebo bridge for topic communication between Gazebo and ROS 2
-    # Gazebo topics are discovered via 'gz topic -l'
+    # =========================================================================
+    # ROS-Gazebo Bridge
+    # =========================================================================
+    # Bridge configuration for topic communication between Gazebo and ROS 2
+    # Discover Gazebo topics with: gz topic -l
     ros_gz_bridge = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
@@ -207,7 +250,7 @@ def generate_launch_description():
             '/joint_states@sensor_msgs/msg/JointState[gz.msgs.Model',
             # TF
             '/tf@tf2_msgs/msg/TFMessage[gz.msgs.Pose_V',
-            # LIDAR - point cloud from gpu_lidar (topic/points is the PointCloudPacked)
+            # LIDAR - point cloud from gpu_lidar
             '/velodyne_points/points@sensor_msgs/msg/PointCloud2[gz.msgs.PointCloudPacked',
             # Camera 1 topics
             '/camera1/image@sensor_msgs/msg/Image[gz.msgs.Image',
@@ -226,26 +269,27 @@ def generate_launch_description():
             # Remap camera depth images to expected names
             ('/camera1/depth_image', '/camera1/depth'),
             ('/camera2/depth_image', '/camera2/depth'),
-            # Camera points stay on simple names: /camera1/points, /camera2/points
-            # Update RViz to subscribe to these topics
         ],
         output='screen'
     )
 
-    # Launch the nodes
+    # =========================================================================
+    # Launch Description
+    # =========================================================================
     return LaunchDescription([
         DeclareLaunchArgument(
             'use_sim_time',
             default_value='true',
-            description='Use sim time if true'),        
-        
+            description='Use simulation time'
+        ),
+
+        # Gazebo
         gz_sim_launch,
         spawn_entity,
         ros_gz_bridge,
 
-        # IMU,
+        # ROS nodes
         node_robot_state_publisher,
         # joint_state_publisher,  # Not needed - Gazebo provides joint states
         rviz,
     ])
-
