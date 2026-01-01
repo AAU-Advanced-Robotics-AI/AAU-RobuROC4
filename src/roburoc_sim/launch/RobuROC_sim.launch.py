@@ -66,11 +66,13 @@ def generate_launch_description():
         parameters=[{'robot_description':robotDescription,
         'use_sim_time': True}] # add other parameters here if required
     )
-    joint_state_publisher = Node(
-        package='joint_state_publisher',
-        executable='joint_state_publisher',
-        output='screen', # add other parameters here if required
-    )    
+    # NOTE: joint_state_publisher is NOT used in simulation because Gazebo
+    # publishes joint states via the ros_gz_bridge. Using both causes conflicts.
+    # joint_state_publisher = Node(
+    #     package='joint_state_publisher',
+    #     executable='joint_state_publisher',
+    #     output='screen',
+    # )    
     # joint_state_publisher_gui = Node(
         # package='joint_state_publisher_gui',
         # executable='joint_state_publisher_gui',
@@ -243,7 +245,7 @@ def generate_launch_description():
 
         # IMU,
         node_robot_state_publisher,
-        joint_state_publisher,
+        # joint_state_publisher,  # Not needed - Gazebo provides joint states
         rviz,
     ])
 
