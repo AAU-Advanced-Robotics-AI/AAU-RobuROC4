@@ -1,13 +1,15 @@
 <?xml version="1.0"?>
 <!--
-  d435_camera.urdf.xacro - Intel RealSense D435 Cameras
+  d435i_camera.urdf.xacro - Intel RealSense D435i Cameras
   
-  This file instantiates two D435 depth cameras on the robot:
+  This file instantiates two D435i depth cameras on the robot:
     - camera1: Front-facing (positive X direction)
     - camera2: Rear-facing (negative X direction)
     
+  The D435i includes an IMU in addition to the RGB-D sensors.
+    
   Dependencies:
-    - realsense2_description package (for _d435.urdf.xacro macro)
+    - realsense2_description package (for _d435i.urdf.xacro macro)
     - sensors/d435_camera.gazebo.xacro (for Gazebo simulation)
     - common/properties.xacro (for camera positions)
     
@@ -19,11 +21,9 @@
 
     <!-- Camera configuration arguments -->
     <xacro:arg name="use_nominal_extrinsics" default="true"/>
-    <xacro:arg name="add_plug" default="false" />
-    <xacro:arg name="use_mesh" default="true" />
     
-    <!-- Include D435 URDF macro from realsense2_description package -->
-    <xacro:include filename="$(find realsense2_description)/urdf/_d435.urdf.xacro" />
+    <!-- Include D435i URDF macro from realsense2_description package -->
+    <xacro:include filename="$(find realsense2_description)/urdf/_d435i.urdf.xacro" />
     
     <!-- Include Gazebo sensor definition -->
     <xacro:include filename="$(find roburoc_description)/urdf/sensors/d435_camera.gazebo.xacro" />
@@ -31,43 +31,45 @@
     <!-- ############################################## -->
     <!--              Camera 1 (Front)                 -->
     <!-- ############################################## -->
-    <xacro:sensor_d435 parent="base_link" name="camera1" 
-        use_nominal_extrinsics="$(arg use_nominal_extrinsics)" 
-        add_plug="$(arg add_plug)" 
-        use_mesh="$(arg use_mesh)">
+    <xacro:sensor_d435i parent="base_link" name="camera1" 
+        use_nominal_extrinsics="$(arg use_nominal_extrinsics)">
         <origin xyz="${camera_1_origin}" rpy="${camera_1_rotation}"/>
-    </xacro:sensor_d435>
+    </xacro:sensor_d435i>
     
-    <!-- Gazebo sensor for camera1 -->
+    <!-- Gazebo sensor for camera1 
+         Uses camera1_color_frame (non-optical) because Gazebo renders along +X axis
+         which matches the ROS frame convention. This displays correctly in RViz.
+         For RTAB-Map, the frame convention is handled internally. -->
     <xacro:gazebo_d435 
         camera_name="camera1" 
         reference_link="camera1_link" 
         topics_ns="camera1" 
-        depth_optical_frame="camera1_depth_frame" 
+        depth_optical_frame="camera1_color_frame" 
         color_optical_frame="camera1_color_frame" 
-        infrared1_optical_frame="camera1_left_ir_optical_frame" 
-        infrared2_optical_frame="camera1_right_ir_optical_frame" 
+        infrared1_optical_frame="camera1_color_frame" 
+        infrared2_optical_frame="camera1_color_frame" 
         publish_pointcloud="true"/>
 
     <!-- ############################################## -->
     <!--              Camera 2 (Rear)                  -->
     <!-- ############################################## -->
-    <xacro:sensor_d435 parent="base_link" name="camera2" 
-        use_nominal_extrinsics="$(arg use_nominal_extrinsics)" 
-        add_plug="$(arg add_plug)" 
-        use_mesh="$(arg use_mesh)">
+    <xacro:sensor_d435i parent="base_link" name="camera2" 
+        use_nominal_extrinsics="$(arg use_nominal_extrinsics)">
         <origin xyz="${camera_2_origin}" rpy="${camera_2_rotation}"/>
-    </xacro:sensor_d435>
+    </xacro:sensor_d435i>
 
-    <!-- Gazebo sensor for camera2 -->
+    <!-- Gazebo sensor for camera2 
+         Uses camera2_color_frame (non-optical) because Gazebo renders along +X axis
+         which matches the ROS frame convention. This displays correctly in RViz.
+         For RTAB-Map, the frame convention is handled internally. -->
     <xacro:gazebo_d435 
         camera_name="camera2" 
         reference_link="camera2_link" 
         topics_ns="camera2" 
-        depth_optical_frame="camera2_depth_frame" 
+        depth_optical_frame="camera2_color_frame" 
         color_optical_frame="camera2_color_frame" 
-        infrared1_optical_frame="camera2_left_ir_optical_frame" 
-        infrared2_optical_frame="camera2_right_ir_optical_frame" 
+        infrared1_optical_frame="camera2_color_frame" 
+        infrared2_optical_frame="camera2_color_frame" 
         publish_pointcloud="true"/>
   
 </robot>
