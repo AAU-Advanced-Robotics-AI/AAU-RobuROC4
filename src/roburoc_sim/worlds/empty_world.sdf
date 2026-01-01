@@ -141,5 +141,35 @@
       </link>
     </model>
 
+    <!-- Add cylinder obstacle lying on the ground 2m in front of the robot partially into the ground to have the robot drive over -->
+    <!-- Rotate the cylinder to lie on its side -->
+    <model name='ground_cylinder_obstacle'>
+      <static>true</static>
+      <pose>2 0 0 1.5708 0 0</pose>
+      <link name='link'>
+        <collision name='collision'>
+          <geometry>
+            <cylinder>
+              <radius>0.1</radius>
+              <length>2.0</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name='visual'>
+          <geometry>
+            <cylinder>
+              <radius>0.1</radius>
+              <length>2.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.2 0.8 0.2 1</ambient>
+            <diffuse>0.2 0.8 0.2 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
   </world>
 </sdf>

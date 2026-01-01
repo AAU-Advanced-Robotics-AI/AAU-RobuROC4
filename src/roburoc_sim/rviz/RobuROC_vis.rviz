@@ -587,10 +587,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.25083521008491516
+      Pitch: 0.39583516120910645
       Target Frame: base_link
       Value: ThirdPersonFollower (rviz_default_plugins)
-      Yaw: 4.226417541503906
+      Yaw: 2.1964166164398193
     Saved: ~
 Window Geometry:
   Back RGB Camera Image:

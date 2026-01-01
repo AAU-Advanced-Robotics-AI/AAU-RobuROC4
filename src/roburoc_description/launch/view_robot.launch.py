@@ -19,7 +19,7 @@ def generate_launch_description():
     pkg_description = get_package_share_directory('roburoc_description')
     
     # Process XACRO to URDF
-    xacro_file = os.path.join(pkg_description, 'urdf', 'RobuROC_model.urdf.xacro')
+    xacro_file = os.path.join(pkg_description, 'urdf', 'roburoc.urdf.xacro')
     robot_description = xacro.process_file(xacro_file).toxml()
     
     # RViz config

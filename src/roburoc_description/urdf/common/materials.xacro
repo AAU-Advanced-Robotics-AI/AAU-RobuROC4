@@ -1,0 +1,44 @@
+<?xml version="1.0"?>
+<!--
+  materials.xacro - RobuROC Material Definitions
+  
+  This file contains URDF material (color) definitions used for
+  visualization in RViz. Note that Gazebo uses its own material
+  system defined in the gazebo/ xacro files.
+  
+  Available materials:
+    - white, black, grey
+    - red, green, blue
+    - orange
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+    <material name="white">
+        <color rgba="1 1 1 1"/>
+    </material>
+
+    <material name="orange">
+        <color rgba="1 0.3 0.1 1"/>
+    </material>
+
+    <material name="blue">
+        <color rgba="0.2 0.2 1 1"/>
+    </material>
+
+    <material name="green">
+        <color rgba="0.2 1 0.2 1"/>
+    </material>
+
+    <material name="red">
+        <color rgba="1 0.2 0.2 1"/>
+    </material>
+
+    <material name="black">
+        <color rgba="0 0 0 1"/>
+    </material>
+
+    <material name="grey">
+        <color rgba="0.5 0.5 0.5 1"/>
+    </material>
+
+</robot>

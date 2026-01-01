@@ -30,7 +30,7 @@ def generate_launch_description():
     # robot_description_raw = xacro.process_file(xacro_file).toxml()
 
 
-    modelFileRelativePath = 'urdf/RobuROC_model.urdf.xacro'
+    modelFileRelativePath = 'urdf/roburoc.urdf.xacro'
     # worldFileRelativePath = 'worlds/RobuROC_env.world'
      # worldFileRelativePath = 'worlds/flat.world'
     worldFileRelativePath = 'worlds/cafe.world'

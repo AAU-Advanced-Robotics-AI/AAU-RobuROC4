@@ -1,0 +1,64 @@
+<?xml version="1.0"?>
+<!--
+  roburoc.urdf.xacro - RobuROC Robot Main Entry Point
+  
+  This is the main URDF/xacro file for the RobuROC robot. It assembles
+  the complete robot by including all component files.
+  
+  File structure:
+    urdf/
+    ├── roburoc.urdf.xacro         <- You are here
+    ├── common/
+    │   ├── properties.xacro       - Robot dimensions and positions
+    │   ├── materials.xacro        - URDF color definitions
+    │   └── inertia_macros.xacro   - Inertia calculation helpers
+    ├── base/
+    │   └── chassis_and_wheels.xacro - Robot platform
+    ├── sensors/
+    │   ├── d435_camera.urdf.xacro   - Intel RealSense D435 cameras
+    │   ├── d435_camera.gazebo.xacro - D435 Gazebo sensor
+    │   └── vlp16_lidar.urdf.xacro   - Velodyne VLP-16 lidar
+    └── gazebo/
+        └── simulation.xacro       - Gazebo physics and drive plugins
+        
+  Usage:
+    # Generate URDF:
+    xacro roburoc.urdf.xacro > roburoc.urdf
+    
+    # View in RViz:
+    ros2 launch roburoc_description display.launch.py
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="RobuROC">
+
+    <!-- ############################################## -->
+    <!--              Common Definitions               -->
+    <!-- ############################################## -->
+    <!-- Robot dimensions and mounting positions -->
+    <xacro:include filename="$(find roburoc_description)/urdf/common/properties.xacro" />
+    
+    <!-- URDF material (color) definitions -->
+    <xacro:include filename="$(find roburoc_description)/urdf/common/materials.xacro" />
+    
+    <!-- Inertia calculation macros -->
+    <xacro:include filename="$(find roburoc_description)/urdf/common/inertia_macros.xacro" />
+
+    <!-- ############################################## -->
+    <!--              Robot Base Platform              -->
+    <!-- ############################################## -->
+    <xacro:include filename="$(find roburoc_description)/urdf/base/chassis_and_wheels.xacro" />
+
+    <!-- ############################################## -->
+    <!--                   Sensors                     -->
+    <!-- ############################################## -->
+    <!-- Intel RealSense D435 depth cameras (front + rear) -->
+    <xacro:include filename="$(find roburoc_description)/urdf/sensors/d435_camera.urdf.xacro"/>
+    
+    <!-- Velodyne VLP-16 lidar -->
+    <xacro:include filename="$(find roburoc_description)/urdf/sensors/vlp16_lidar.urdf.xacro" />
+
+    <!-- ############################################## -->
+    <!--           Gazebo Simulation Config            -->
+    <!-- ############################################## -->
+    <xacro:include filename="$(find roburoc_description)/urdf/gazebo/simulation.xacro" />
+
+</robot>
