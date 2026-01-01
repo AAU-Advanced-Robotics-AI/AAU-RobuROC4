@@ -9,7 +9,7 @@ Launches the RobuROC robot in Gazebo Harmonic simulation with:
   - RViz visualization
 
 Usage:
-    ros2 launch roburoc_sim RobuROC_sim.launch.py
+    ros2 launch roburoc_sim roburoc_gazebo_sim.launch.py
 """
 
 import os
