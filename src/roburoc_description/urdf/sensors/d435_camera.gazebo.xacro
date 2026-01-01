@@ -6,7 +6,7 @@
   for simulating the Intel RealSense D435 depth camera.
   
   Sensor specifications (simulated):
-    - Resolution: 640x480
+    - Resolution: 1280x720
     - Horizontal FOV: 69.4 degrees
     - Depth range: 0.2 - 10.0 meters
     - Update rate: 30 Hz
@@ -53,8 +53,8 @@
                 <camera name="${camera_name}">
                     <horizontal_fov>${69.4*deg_to_rad}</horizontal_fov>
                     <image>
-                        <width>640</width>
-                        <height>480</height>
+                        <width>1280</width>
+                        <height>720</height>
                         <format>R8G8B8</format>
                     </image>
                     <clip>
