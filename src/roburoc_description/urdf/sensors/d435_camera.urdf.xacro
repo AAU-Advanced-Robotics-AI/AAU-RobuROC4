@@ -37,9 +37,9 @@
     </xacro:sensor_d435i>
     
     <!-- Gazebo sensor for camera1 
-         Uses camera1_color_frame (non-optical) because Gazebo renders along +X axis
-         which matches the ROS frame convention. This displays correctly in RViz.
-         For RTAB-Map, the frame convention is handled internally. -->
+         Uses camera1_color_frame (non-optical) for correct RViz visualization.
+         The optical frame transform (camera1_color_optical_frame_gz) is created
+         in roburoc_gazebo_sim.launch.py for RTAB-Map to use. -->
     <xacro:gazebo_d435 
         camera_name="camera1" 
         reference_link="camera1_link" 
@@ -59,9 +59,9 @@
     </xacro:sensor_d435i>
 
     <!-- Gazebo sensor for camera2 
-         Uses camera2_color_frame (non-optical) because Gazebo renders along +X axis
-         which matches the ROS frame convention. This displays correctly in RViz.
-         For RTAB-Map, the frame convention is handled internally. -->
+         Uses camera2_color_frame (non-optical) for correct RViz visualization.
+         The optical frame transform (camera2_color_optical_frame_gz) is created
+         in roburoc_gazebo_sim.launch.py for RTAB-Map to use. -->
     <xacro:gazebo_d435 
         camera_name="camera2" 
         reference_link="camera2_link" 

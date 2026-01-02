@@ -8,9 +8,11 @@
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
 
   <exec_depend>roburoc_sim</exec_depend>
   <exec_depend>roburoc_description</exec_depend>
+  <exec_depend>rclpy</exec_depend>
   
   <!-- RTAB-Map packages -->
   <exec_depend>rtabmap_ros</exec_depend>

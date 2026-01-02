@@ -148,6 +148,9 @@
             <publish_odom>true</publish_odom>
             <publish_odom_tf>false</publish_odom_tf>
             <publish_wheel_tf>false</publish_wheel_tf>
+
+            <!-- Odometry parameters -->
+            <odom_publish_frequency>50.0</odom_publish_frequency>
         </plugin>
     </gazebo>
 
