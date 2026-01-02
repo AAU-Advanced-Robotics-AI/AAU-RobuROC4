@@ -3,7 +3,7 @@
 <package format="3">
   <name>roburoc_slam</name>
   <version>0.0.1</version>
-  <description>RTAB-Map SLAM launch files for RobuROC4 simulation and real robot</description>
+  <description>SLAM launch files for RobuROC4 simulation and real robot (RTAB-Map and Cartographer)</description>
   <maintainer email="sibo@es.aau.dk">Simon Bøgh</maintainer>
   <license>Apache-2.0</license>
 
@@ -21,6 +21,9 @@
   <exec_depend>rtabmap_viz</exec_depend>
   <exec_depend>rtabmap_sync</exec_depend>
   <exec_depend>rtabmap_util</exec_depend>
+  
+  <!-- Cartographer packages -->
+  <exec_depend>cartographer_ros</exec_depend>
   
   <!-- ROS 2 dependencies -->
   <exec_depend>tf2_ros</exec_depend>
