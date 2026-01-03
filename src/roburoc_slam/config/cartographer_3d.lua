@@ -29,8 +29,8 @@ options = {
   use_landmarks = false,
   
   -- Single 3D LiDAR (VLP16)
-  num_laser_scanners = 0,
-  num_multi_echo_laser_scanners = 0,
+  num_laser_scans = 0,
+  num_multi_echo_laser_scans = 0,
   num_subdivisions_per_laser_scan = 1,
   num_point_clouds = 1,  -- One VLP16 LiDAR
   

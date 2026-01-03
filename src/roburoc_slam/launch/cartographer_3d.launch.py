@@ -78,6 +78,8 @@ def generate_launch_description():
                 ('points2', '/velodyne_points'),
                 # Use Gazebo wheel odometry
                 ('odom', '/odom'),
+                # IMU data from Gazebo
+                ('imu', '/imu'),
             ],
         ),
         
