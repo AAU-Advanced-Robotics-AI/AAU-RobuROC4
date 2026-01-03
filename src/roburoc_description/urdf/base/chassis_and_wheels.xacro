@@ -43,6 +43,31 @@
     </link>
 
     <!-- ############################################## -->
+    <!--                  IMU Link                     -->
+    <!-- ############################################## -->
+    <!-- IMU sensor mounted on chassis -->
+    <joint name="imu_joint" type="fixed">
+        <parent link="base_link"/>
+        <child link="IMU_link"/>
+        <origin xyz="0 0 0.1" rpy="0 0 0"/>
+    </joint>
+
+    <link name="IMU_link">
+        <visual>
+            <geometry>
+                <box size="0.02 0.02 0.01"/>
+            </geometry>
+            <material name="red">
+                <color rgba="0.8 0 0 1"/>
+            </material>
+        </visual>
+        <inertial>
+            <mass value="0.01"/>
+            <inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001"/>
+        </inertial>
+    </link>
+
+    <!-- ############################################## -->
     <!--                Chassis Link                   -->
     <!-- ############################################## -->
     <joint name="chassis_joint" type="fixed">

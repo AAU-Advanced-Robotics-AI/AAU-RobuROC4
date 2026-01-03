@@ -246,6 +246,8 @@ def generate_launch_description():
             '/cmd_vel@geometry_msgs/msg/Twist@gz.msgs.Twist',
             # Odometry
             '/odom@nav_msgs/msg/Odometry[gz.msgs.Odometry',
+            # IMU
+            '/imu@sensor_msgs/msg/Imu[gz.msgs.IMU',
             # Joint states
             '/joint_states@sensor_msgs/msg/JointState[gz.msgs.Model',
             # TF
