@@ -10,9 +10,9 @@ on:
 # Build jobs
 jobs:
   build:
-    runs-on: ubuntu-22.04 # Run on Ubuntu 22.04
+    runs-on: ubuntu-24.04 # Run on Ubuntu 24.04
     container:
-      image: ros:humble # Use ROS 2 Humble image
+      image: ros:jazzy # Use ROS 2 Jazzy image
     
     steps:
       # Checkout code from the repository
@@ -29,18 +29,18 @@ jobs:
           apt-get install -y --no-install-recommends \
             python3-pip \
             python3-colcon-common-extensions \
-            ros-humble-xacro \
-            ros-humble-joint-state-publisher \
-            ros-humble-robot-state-publisher \
-            ros-humble-gazebo-ros \
-            ros-humble-image-transport \
-            ros-humble-camera-info-manager \
-            ros-humble-vision-msgs \
-            ros-humble-realsense2-camera \
-            ros-humble-realsense2-description \
-            ros-humble-velodyne-description \
-            ros-humble-teleop-twist-keyboard
-          pip3 install canopen pydantic nest-asyncio
+            ros-jazzy-xacro \
+            ros-jazzy-joint-state-publisher \
+            ros-jazzy-robot-state-publisher \
+            ros-jazzy-ros-gz \
+            ros-jazzy-image-transport \
+            ros-jazzy-camera-info-manager \
+            ros-jazzy-vision-msgs \
+            ros-jazzy-realsense2-camera \
+            ros-jazzy-realsense2-description \
+            ros-jazzy-velodyne-description \
+            ros-jazzy-teleop-twist-keyboard
+          pip3 install --break-system-packages canopen pydantic nest-asyncio
 
       # Create workspace and copy source
       - name: Create workspace and copy source
@@ -59,7 +59,7 @@ jobs:
       - name: Build workspace
         run: |
           cd /ros2_ws
-          source /opt/ros/humble/setup.bash
+          source /opt/ros/jazzy/setup.bash
           colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
         shell: bash
 
@@ -67,7 +67,7 @@ jobs:
       - name: List installed packages
         run: |
           cd /ros2_ws
-          source /opt/ros/humble/setup.bash
+          source /opt/ros/jazzy/setup.bash
           source install/setup.bash
           echo "✅ Successfully built packages:"
           ros2 pkg list | grep -E 'RobuROC|roburoc|canopen|imu' || echo "Core packages built"
