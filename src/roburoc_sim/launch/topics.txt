@@ -17,16 +17,13 @@ robotlab@robotlab-ThinkPad-P16-Gen-2:~/P9-RobuROC4$ ros2 topic list
 /goal_pose
 /initialpose
 /joint_states
-/mission/status
 /odom
 /parameter_events
 /robot_description
 /rosout
-/tess_mission_manager/transition_event
 /tf
 /tf_static
 /velodyne_points
-/zones
 
 
 robotlab@robotlab-ThinkPad-P16-Gen-2:~/P9-RobuROC4$ gz topic -l
