@@ -1,0 +1,37 @@
+
+rtabmap:
+  ros__parameters:
+
+    # Basic settings
+    delete_db_on_start: 'true'
+    compressed: 'true'
+    rgbd_cameras: '2'
+
+    # Visual odometry
+    visual_odometry: 'true'
+    icp_odometry: 'false'
+
+    # Front camera
+    rgb_topic: "/zed_front/zed/rgb/image_rect_color"
+    depth_topic: "/zed_front/zed/depth/depth_registered"
+    camera_info_topic: "/zed_front/zed/rgb/camera_info"
+
+    # TF
+    publish_tf: 'true'
+    publish_tf_map: 'true'
+    publish_tf_odom: 'true'
+    frame_id: "base_link"
+    odom_frame_id: "odom"
+    map_frame_id: "map"
+
+    # Sync and QoS
+    approx_sync: 'true'
+    qos: '1'
+    topic_queue_size: '100'
+    sync_queue_size: '300'
+
+    # rtabmap arguments These are important for localization mode, remove --delete_db_on_start if in localization mode
+    rtabmap_args: "--delete_db_on_start"
+    localization: 'false'
+    database_path: '~/.ros/rtabmap.db'
+

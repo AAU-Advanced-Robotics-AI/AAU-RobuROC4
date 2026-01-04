@@ -6,7 +6,7 @@
   for simulating the Intel RealSense D435 depth camera.
   
   Sensor specifications (simulated):
-    - Resolution: 640x480
+    - Resolution: 1280x720
     - Horizontal FOV: 69.4 degrees
     - Depth range: 0.2 - 10.0 meters
     - Update rate: 30 Hz
@@ -32,9 +32,16 @@
             
             <!-- 
                 Gazebo Harmonic RGBD Camera sensor with GPU acceleration
-                Camera default: looks along +X axis of sensor frame
-                camera_link frame: +X forward, +Y left, +Z up
-                No rotation needed - camera already looks forward along +X
+                
+                Gazebo camera renders looking along +X of the reference link (camera_link).
+                We use the non-optical frame (camera1_color_frame) as gz_frame_id because:
+                - camera_link has +X forward (ROS robot convention)
+                - Gazebo renders along +X
+                - This makes RViz visualization correct
+                
+                For RTAB-Map/vision algorithms that expect optical frame convention,
+                the frame rotation is handled via the 'Reg/Force3DoF' and frame_id
+                configuration in the RTAB-Map launch file.
             -->
             <sensor name="${camera_name}_rgbd" type="rgbd_camera">
                 <pose>0 0 0 0 0 0</pose>
@@ -46,8 +53,8 @@
                 <camera name="${camera_name}">
                     <horizontal_fov>${69.4*deg_to_rad}</horizontal_fov>
                     <image>
-                        <width>640</width>
-                        <height>480</height>
+                        <width>1280</width>
+                        <height>720</height>
                         <format>R8G8B8</format>
                     </image>
                     <clip>

@@ -1,0 +1,40 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>roburoc_slam</name>
+  <version>0.0.1</version>
+  <description>SLAM launch files for RobuROC4 simulation and real robot (RTAB-Map and Cartographer)</description>
+  <maintainer email="sibo@es.aau.dk">Simon Bøgh</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+  <exec_depend>roburoc_sim</exec_depend>
+  <exec_depend>roburoc_description</exec_depend>
+  <exec_depend>rclpy</exec_depend>
+  
+  <!-- RTAB-Map packages -->
+  <exec_depend>rtabmap_ros</exec_depend>
+  <exec_depend>rtabmap_odom</exec_depend>
+  <exec_depend>rtabmap_slam</exec_depend>
+  <exec_depend>rtabmap_viz</exec_depend>
+  <exec_depend>rtabmap_sync</exec_depend>
+  <exec_depend>rtabmap_util</exec_depend>
+  
+  <!-- Cartographer packages -->
+  <exec_depend>cartographer_ros</exec_depend>
+  
+  <!-- ROS 2 dependencies -->
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

@@ -246,6 +246,8 @@ def generate_launch_description():
             '/cmd_vel@geometry_msgs/msg/Twist@gz.msgs.Twist',
             # Odometry
             '/odom@nav_msgs/msg/Odometry[gz.msgs.Odometry',
+            # IMU
+            '/imu@sensor_msgs/msg/Imu[gz.msgs.IMU',
             # Joint states
             '/joint_states@sensor_msgs/msg/JointState[gz.msgs.Model',
             # TF
@@ -274,6 +276,42 @@ def generate_launch_description():
     )
 
     # =========================================================================
+    # Static Transform Publishers for RTAB-Map Optical Frames
+    # 
+    # Gazebo publishes camera data with frame_id=camera1_color_frame which uses
+    # ROS convention (+X forward, +Y left, +Z up). RTAB-Map and other vision
+    # algorithms expect optical frame convention (+Z forward, +X right, +Y down).
+    # 
+    # These static transforms create optical frames that RTAB-Map can use.
+    # Rotation: roll=-π/2, yaw=-π/2 converts ROS frame to optical frame.
+    # =========================================================================
+    camera1_optical_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='camera1_optical_tf',
+        arguments=[
+            '--x', '0', '--y', '0', '--z', '0',
+            '--roll', '-1.5707963', '--pitch', '0', '--yaw', '-1.5707963',
+            '--frame-id', 'camera1_color_frame',
+            '--child-frame-id', 'camera1_color_optical_frame_gz'
+        ],
+        parameters=[{'use_sim_time': True}],
+    )
+    
+    camera2_optical_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='camera2_optical_tf',
+        arguments=[
+            '--x', '0', '--y', '0', '--z', '0',
+            '--roll', '-1.5707963', '--pitch', '0', '--yaw', '-1.5707963',
+            '--frame-id', 'camera2_color_frame',
+            '--child-frame-id', 'camera2_color_optical_frame_gz'
+        ],
+        parameters=[{'use_sim_time': True}],
+    )
+
+    # =========================================================================
     # Launch Description
     # =========================================================================
     return LaunchDescription([
@@ -292,4 +330,8 @@ def generate_launch_description():
         node_robot_state_publisher,
         # joint_state_publisher,  # Not needed - Gazebo provides joint states
         rviz,
+        
+        # Optical frame transforms for SLAM
+        camera1_optical_tf,
+        camera2_optical_tf,
     ])
