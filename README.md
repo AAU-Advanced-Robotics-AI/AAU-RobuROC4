@@ -30,16 +30,15 @@ This repository contains ROS 2 packages for operating and simulating the RobuROC
 ```
 P9-RobuROC4/
 ├── src/
+│   ├── roburoc_bringup/          # Hardware bringup launch files
 │   ├── roburoc_description/      # Robot URDF, meshes, and RViz config
-│   ├── roburoc_sim/              # Simulation and SLAM launch files
-│   ├── roburoc_canopen/     # CANopen motor controller interface
-│   ├── roburoc_controller/  # Joystick/controller input handling
+│   ├── roburoc_sim/              # Simulation launch files
+│   ├── roburoc_slam/             # SLAM configuration and launch files
+│   ├── roburoc_canopen/          # CANopen motor controller interface
+│   ├── roburoc_controller/       # Joystick/controller input handling
 │   ├── roburoc_canopen_interfaces/  # Custom CANopen ROS messages/services
-│   ├── roburoc_imu_publisher/       # IMU data publishing node
-│   └── thirdparty/          # External dependencies
-│       ├── realsense_gazebo_plugin/
-│       └── velodyne_simulator/
-├── RobuROC 4 Docs/          # Platform documentation and manuals
+│   └── roburoc_imu_publisher/    # IMU data publishing node
+├── RobuROC 4 Docs/               # Platform documentation and manuals
 └── Minimally working example/
 ```
 
@@ -60,7 +59,8 @@ Both configurations output a 3D occupancy grid map and robot pose estimates, vis
 - ROS 2 (Humble/Iron/Jazzy)
 - Gazebo (for simulation)
 - RTAB-Map ROS packages
-- `teleop_twist_keyboard` (for simulation control)
+- Velodyne ROS packages
+- Intel RealSense ROS packages
 
 ### Running on Hardware
 
@@ -76,18 +76,24 @@ Both configurations output a 3D occupancy grid map and robot pose estimates, vis
    source install/setup.bash
    ```
 
-2. **Launch SLAM** (choose one based on sensor setup):
+3. **Launch the robot:**
+   ```bash
+   ros2 launch roburoc_bringup robot.launch.py
+   ```
+   This launches the robot state publisher, CANopen driver, controller, joystick, and all sensors (IMU, Velodyne LiDAR, RealSense cameras).
+
+   To launch only the sensors separately:
+   ```bash
+   ros2 launch roburoc_bringup sensors.launch.py
+   ```
+
+4. **Launch SLAM** (choose one based on sensor setup):
    ```bash
    ros2 launch roburoc_sim 1Mapping.launch.py  # RGB-D based
    ros2 launch roburoc_sim 2Mapping.launch.py  # LiDAR based
    ```
 
-3. **Enable controller** (new terminal):
-   ```bash
-   ros2 launch roburoc_controller RobuROC_Controller_launch.py
-   ```
-
-4. **Visualize** — RViz launches automatically showing the map, point clouds, and robot pose.
+5. **Visualize** — RViz launches automatically showing the map, point clouds, and robot pose.
 
 ### Running Simulation
 
