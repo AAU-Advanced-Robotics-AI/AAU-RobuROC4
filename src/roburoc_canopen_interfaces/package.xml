@@ -2,7 +2,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>roburoc_canopen_interfaces</name>
-  <version>0.0.1</version>
+  <version>0.1.0</version>
   <description>ROS 2 message and service interfaces for CANopen communication</description>
   <maintainer email="sibo@es.aau.dk">Simon Bøgh</maintainer>
   <maintainer email="tssa20@student.aau.dk">mogens</maintainer>
