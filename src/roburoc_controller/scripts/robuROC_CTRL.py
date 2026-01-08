@@ -377,7 +377,7 @@ class RobuROC_CTRL(Node):
 
     def Subscription_CB(self, message):
         """
-        Generic callback for storing data recieved from the RobuROC 4 drivers.
+        Generic callback for storing data received from the RobuROC 4 drivers.
         This includes:
         - Velocity readings
         - Current readings
