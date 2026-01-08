@@ -101,7 +101,7 @@ Both configurations output a 3D occupancy grid map and robot pose estimates, vis
    ```bash
    colcon build
    source install/setup.bash
-   ros2 launch roburoc_sim roburoc_sim.launch.py
+ros2 launch roburoc_sim roburoc_gazebo_sim.launch.py
    ```
 
 2. **Control the robot** (new terminal):
