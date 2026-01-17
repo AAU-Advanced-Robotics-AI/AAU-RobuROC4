@@ -48,21 +48,14 @@ P9-RobuROC4/
 
 ## Mapping Algorithms
 
-SLAM configurations available for hardware and simulation:
+Two SLAM configurations are available depending on sensor preference:
 
-**Hardware:**
 | Launch File | Odometry Source | Mapping Sensors |
 |-------------|-----------------|-----------------|
-| `rtab_dual_simple.launch.py` | Visual (RGB-D) | Dual RGB-D cameras |
-| `rgbd_lidar.launch.py` | Visual + ICP | RGB-D + Velodyne LiDAR |
+| `1Mapping.launch.py` | Visual (RGB-D) | Dual RGB-D cameras |
+| `2Mapping.launch.py` | ICP (LiDAR) | Velodyne LiDAR |
 
-**Simulation:**
-| Launch File | Odometry Source | Mapping Sensors |
-|-------------|-----------------|-----------------|
-| `sim_1Mapping.launch.py` | Visual (RGB-D) | Dual RGB-D cameras |
-| `sim_2Mapping.launch.py` | ICP (LiDAR) | Velodyne LiDAR |
-
-All configurations output a 3D occupancy grid map and robot pose estimates, visualized in RViz.
+Both configurations output a 3D occupancy grid map and robot pose estimates, visualized in RViz.
 
 ## Setup
 
@@ -109,8 +102,8 @@ All configurations output a 3D occupancy grid map and robot pose estimates, visu
 
 4. **Launch SLAM** (choose one based on sensor setup):
    ```bash
-   ros2 launch roburoc_sim rtab_dual_simple.launch.py  # Dual RGB-D cameras
-   ros2 launch roburoc_sim rgbd_lidar.launch.py        # RGB-D + LiDAR
+   ros2 launch roburoc_sim 1Mapping.launch.py  # RGB-D based
+   ros2 launch roburoc_sim 2Mapping.launch.py  # LiDAR based
    ```
 
 5. **Visualize** — RViz launches automatically showing the map, point clouds, and robot pose.
