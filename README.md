@@ -9,6 +9,9 @@ ROS 2 software stack for the RobuROC4 robotic platform, featuring SLAM, CANopen 
 - [File Structure](#file-structure)
 - [Mapping Algorithms](#mapping-algorithms)
 - [Setup](#setup)
+  - [Running on Hardware](#running-on-hardware)
+  - [Running Simulation](#running-simulation)
+- [Contributing](#contributing)
 
 ## Overview
 
@@ -56,7 +59,7 @@ Both configurations output a 3D occupancy grid map and robot pose estimates, vis
 ## Setup
 
 ### Prerequisites
-- ROS 2 (Humble/Iron/Jazzy)
+- ROS 2 Jazzy (Ubuntu 24.04) or ROS 2 Humble (Ubuntu 22.04)
 - Gazebo (for simulation)
 - RTAB-Map ROS packages
 - Velodyne ROS packages
@@ -65,9 +68,18 @@ Both configurations output a 3D occupancy grid map and robot pose estimates, vis
 ### Running on Hardware
 
 1. **Install dependencies:**
-   If you are using ROS 2 Jazzy (Ubuntu 24.04+), you may need to use the `PIP_BREAK_SYSTEM_PACKAGES=1` flag. This is required because newer OS versions mark the system Python environment as "externally managed" to prevent `pip` from conflicting with `apt`.
+   
+   For ROS 2 Jazzy (Ubuntu 24.04):
    ```bash
-   PIP_BREAK_SYSTEM_PACKAGES=1 rosdep install -i --from-path src --rosdistro jazzy -y
+   rosdep install -i --from-path src --rosdistro jazzy -y
+   pip3 install --break-system-packages canopen pydantic nest-asyncio
+   ```
+   Note: The `--break-system-packages` flag is required for Ubuntu 24.04+ due to PEP 668 externally-managed environment restrictions.
+   
+   For ROS 2 Humble (Ubuntu 22.04):
+   ```bash
+   rosdep install -i --from-path src --rosdistro humble -y
+   pip3 install canopen pydantic nest-asyncio
    ```
 
 2. **Build the workspace:**
@@ -101,11 +113,17 @@ Both configurations output a 3D occupancy grid map and robot pose estimates, vis
    ```bash
    colcon build
    source install/setup.bash
-ros2 launch roburoc_sim roburoc_gazebo_sim.launch.py
+   ros2 launch roburoc_sim roburoc_gazebo_sim.launch.py
    ```
 
-2. **Control the robot** (new terminal):
+2. **Control the robot** (in a new terminal):
    ```bash
    ros2 run teleop_twist_keyboard teleop_twist_keyboard
    ```
    Use `i/j/k/l` keys to drive the robot in Gazebo.
+
+## Contributing
+
+Contributions are welcome! For bug reports or feature requests, please open an issue on GitHub. For code contributions, please submit a pull request with a clear description of the changes.
+
+**Contact:** Simon Bøgh (sibo@es.aau.dk)
