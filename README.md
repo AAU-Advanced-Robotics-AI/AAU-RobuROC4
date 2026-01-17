@@ -11,7 +11,6 @@ ROS 2 software stack for the RobuROC4 robotic platform, featuring SLAM, CANopen 
 - [Setup](#setup)
   - [Running on Hardware](#running-on-hardware)
   - [Running Simulation](#running-simulation)
-- [License](#license)
 - [Contributing](#contributing)
 
 ## Overview
@@ -117,26 +116,14 @@ Both configurations output a 3D occupancy grid map and robot pose estimates, vis
    ros2 launch roburoc_sim roburoc_gazebo_sim.launch.py
    ```
 
-2. **Launch SLAM** (in a new terminal, choose one):
-   ```bash
-   ros2 launch roburoc_sim sim_1Mapping.launch.py  # RGB-D based
-   ros2 launch roburoc_sim sim_2Mapping.launch.py  # LiDAR based
-   ```
-
-3. **Control the robot** (in a new terminal):
+2. **Control the robot** (in a new terminal):
    ```bash
    ros2 run teleop_twist_keyboard teleop_twist_keyboard
    ```
    Use `i/j/k/l` keys to drive the robot in Gazebo.
 
-## License
-
-This project is licensed under multiple licenses:
-- `roburoc_bringup`: MIT License
-- All other packages: Apache-2.0 License
-
-See individual package.xml files for specific license information.
-
 ## Contributing
 
 Contributions are welcome! For bug reports or feature requests, please open an issue on GitHub. For code contributions, please submit a pull request with a clear description of the changes.
+
+**Contact:** Simon Bøgh (sibo@es.aau.dk)
