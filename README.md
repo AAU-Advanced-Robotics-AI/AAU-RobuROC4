@@ -138,8 +138,8 @@ All configurations output a 3D occupancy grid map and robot pose estimates, visu
 ## License
 
 This project is licensed under multiple licenses:
-- Most packages: MIT License
-- `roburoc_canopen_interfaces`: Apache-2.0 License
+- `roburoc_bringup`: MIT License
+- All other packages: Apache-2.0 License
 
 See individual package.xml files for specific license information.
 
