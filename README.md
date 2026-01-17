@@ -82,6 +82,7 @@ All configurations output a 3D occupancy grid map and robot pose estimates, visu
    rosdep install -i --from-path src --rosdistro jazzy -y
    pip3 install --break-system-packages canopen pydantic nest-asyncio
    ```
+   Note: The `--break-system-packages` flag is required for Ubuntu 24.04+ due to PEP 668 externally-managed environment restrictions.
    
    For ROS 2 Humble (Ubuntu 22.04):
    ```bash
