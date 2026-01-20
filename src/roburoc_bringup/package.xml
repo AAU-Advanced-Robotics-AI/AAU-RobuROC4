@@ -4,7 +4,7 @@
   <name>roburoc_bringup</name>
   <version>0.1.0</version>
   <description>Bringup package for RobuROC4 robot hardware</description>
-  <maintainer email="sb@es.aau.dk">Simon Bøgh</maintainer>
+  <maintainer email="sibo@es.aau.dk">Simon Bøgh</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
