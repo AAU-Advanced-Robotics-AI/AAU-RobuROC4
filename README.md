@@ -4,6 +4,8 @@
 
 ROS 2 software stack for the RobuROC4 robotic platform, featuring SLAM, CANopen motor control, and simulation capabilities.
 
+<img width="300" alt="image" src="https://github.com/user-attachments/assets/0fef8873-f532-441b-9dd1-a399224b70f6" />
+
 ## Table of Contents
 - [Overview](#overview)
 - [File Structure](#file-structure)
