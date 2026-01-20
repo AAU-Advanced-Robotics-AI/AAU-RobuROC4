@@ -1,6 +1,6 @@
 When running roburoc_gazebo_sim.launch.py
 
-robotlab@robotlab-ThinkPad-P16-Gen-2:~/P9-RobuROC4$ ros2 topic list
+ros2 topic list
 /camera1/camera_info
 /camera1/depth
 /camera1/image
@@ -26,7 +26,7 @@ robotlab@robotlab-ThinkPad-P16-Gen-2:~/P9-RobuROC4$ ros2 topic list
 /velodyne_points
 
 
-robotlab@robotlab-ThinkPad-P16-Gen-2:~/P9-RobuROC4$ gz topic -l
+gz topic -l
 /camera1/camera_info
 /camera1/depth_image
 /camera1/image

@@ -1,6 +1,6 @@
 # RobuROC4 - Autonomous Mobile Robot Platform
 
-[![ROS 2 Build](https://github.com/simonbogh/P9-RobuROC4/actions/workflows/build.yaml/badge.svg)](https://github.com/simonbogh/P9-RobuROC4/actions/workflows/build.yaml)
+[![ROS 2 Build](https://github.com/AAU-Advanced-Robotics-AI/AAU-RobuROC4/actions/workflows/build.yaml/badge.svg)](https://github.com/AAU-Advanced-Robotics-AI/AAU-RobuROC4/actions/workflows/build.yaml)
 
 ROS 2 software stack for the RobuROC4 robotic platform, featuring SLAM, CANopen motor control, and simulation capabilities.
 
@@ -33,7 +33,7 @@ This repository contains ROS 2 packages for operating and simulating the RobuROC
 ## File Structure
 
 ```
-P9-RobuROC4/
+AAU-RobuROC4/
 ├── src/
 │   ├── roburoc_bringup/          # Hardware bringup launch files
 │   ├── roburoc_description/      # Robot URDF, meshes, and RViz config
