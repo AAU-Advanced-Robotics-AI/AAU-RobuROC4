@@ -22,6 +22,10 @@
   <exec_depend>velodyne_driver</exec_depend>
   <exec_depend>velodyne_pointcloud</exec_depend>
   <exec_depend>realsense2_camera</exec_depend>
+  <exec_depend>ublox_gps</exec_depend>
+  <exec_depend>ntrip_client</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+
 
   <export>
     <build_type>ament_cmake</build_type>
