@@ -1,0 +1,52 @@
+<?xml version="1.0"?>
+<!--
+  livox_mid360_rtk.urdf.xacro — Sensor configuration: livox_mid360_rtk
+
+  Sensor suite used from the 2025/2026 FAST-LIO2 + RTK-GPS project:
+    - Livox MID360 solid-state LiDAR (with built-in IMU)
+    - u-blox ZED-F9P RTK-GPS receiver
+
+  Frames contributed to the TF tree:
+    livox_frame  — MID360 sensor origin.  Matches the livox_ros_driver2 default
+                   frame_id ("livox_frame") so no extra static TF is needed.
+                   FAST-LIO2 anchors its "body" frame here.
+    gps          — RTK antenna phase centre.  Matches the ublox_gps node default
+                   output frame_id ("gps") so NavSatFix messages are referenced correctly.
+
+  All transforms are measured from the base_link origin (ground plane centred
+  between the four wheel contact patches, X forward, Y left, Z up per REP-105).
+
+  No visual or collision geometry is defined: this configuration is intended for
+  real hardware only, not simulation.
+
+  See also:
+    launch/sensors/livox_mid360_rtk.launch.py   — drivers for this config
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+    <!-- ── Livox MID360 ───────────────────────────────────────────────────── -->
+    <!-- Mounted on the front safety frame, centred left/right.               -->
+    <!-- XYZ reuses the front camera position (0.6, 0, 0.55) as a placeholder -->
+    <!-- until physically measured. Pitch is measured from the IMU gravity     -->
+    <!-- vector (see livox_pitch_estimator.py); roll and yaw are zero.        -->
+    <link name="livox_frame"/>
+
+    <joint name="mid360_joint" type="fixed">
+        <parent link="base_link"/>
+        <child  link="livox_frame"/>
+        <origin xyz="0.6625 0.0 0.645" rpy="0 0.39373590 0"/>
+    </joint>
+
+    <!-- ── u-blox ZED-F9P RTK antenna ───────────────────────────────────── -->
+    <!-- The antenna is mounted offset from the robot centreline and rotated  -->
+    <!-- 180° (yaw = π) because the connector faces forward on the mount.    -->
+    <!-- Measurements: x=-0.428 m, y=0.295 m (left of centre), z=1.495 m.   -->
+    <link name="gps"/>
+
+    <joint name="gps_joint" type="fixed">
+        <parent link="base_link"/>
+        <child  link="gps"/>
+        <origin xyz="-0.428 0.295 1.495" rpy="0 0 3.14159265"/>
+    </joint>
+
+</robot>
