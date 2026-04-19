@@ -33,8 +33,9 @@ class RobuROC_CTRL(Node):
     _PERIODIC = False
     _HEARTBEAT = False
 
-    # Public variables
-    MAX_SPEED = 2  # Meters per second
+    # Public variables (defaults; overridden by ROS parameters at runtime)
+    MAX_SPEED = 1.0    # Meters per second (normal operating speed)
+    TURBO_SPEED = 2.0  # Meters per second (turbo mode via R2, double normal speed)
     WHEEL_RADIUS = 0.28  # Meters
 
     # Constants
@@ -48,6 +49,13 @@ class RobuROC_CTRL(Node):
     def __init__(self):
         super().__init__('ROC_CTRL')
         self.logger = self.get_logger()
+
+        # Declare and read speed parameters (overridable from launch file)
+        self.declare_parameter('max_speed',   self.MAX_SPEED)
+        self.declare_parameter('turbo_speed', self.TURBO_SPEED)
+        self.MAX_SPEED   = self.get_parameter('max_speed').get_parameter_value().double_value
+        self.TURBO_SPEED = self.get_parameter('turbo_speed').get_parameter_value().double_value
+        self.logger.info(f'Speed limits — normal: {self.MAX_SPEED} m/s, turbo: {self.TURBO_SPEED} m/s')
 
         # Setup canopen help modules
         self._CTW = CTW()
@@ -181,6 +189,7 @@ class RobuROC_CTRL(Node):
         the use of a dead-man switch. The following are the available commands:
 
         - '▲' + Left Stick: Set wheel speeds based on linear and angular axes. ('▲' is the dead-man switch)
+        - '▲' + R2 + Left Stick: Turbo mode — doubles max speed to TURBO_SPEED (2 m/s). Release R2 to return to MAX_SPEED (1 m/s).
         - `■`: Brakes the vehicle.
         - `⬤`: Recovers from an error state or after re-enabling the security measures
         :param message:
@@ -188,9 +197,15 @@ class RobuROC_CTRL(Node):
         """
 
         if message.buttons[2] == 1: # '▲'
+            # R2 (right trigger) enables turbo mode — supports both analog (axes[5]) and digital (buttons[7])
+            turbo = (len(message.axes) > 5 and message.axes[5] < 0) or \
+                    (len(message.buttons) > 7 and message.buttons[7] == 1)
+            speed_multiplier = self.TURBO_SPEED if turbo else self.MAX_SPEED
+            if turbo:
+                self.logger.info(f"Turbo mode active: max speed {self.TURBO_SPEED} m/s")
             left, right = None, None
-            left = round(message.axes[1] - message.axes[0]/ 4, 4) * 1.0
-            right = -round(message.axes[1] + message.axes[0]/ 4, 4) * 1.0
+            left = round(message.axes[1] - message.axes[0]/ 4, 4) * speed_multiplier
+            right = -round(message.axes[1] + message.axes[0]/ 4, 4) * speed_multiplier
             vel_MPS = int(left * (self._SCALE_VELOCITY / self._SCALE_RPM_TO_MPS))
             vel2_MPS = int(right * (self._SCALE_VELOCITY / self._SCALE_RPM_TO_MPS))
             vel_MPS = list(bytearray(vel_MPS.to_bytes(4, byteorder='little', signed=True)))
