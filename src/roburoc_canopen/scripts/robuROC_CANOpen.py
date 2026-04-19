@@ -132,9 +132,17 @@ class RobuROC_Canopen(Node):
 
         if not self._CONNECTED:
             try:
+                # Ensure the network is cleanly disconnected before attempting to connect,
+                # in case a previous failed attempt left it in a half-connected state.
+                try:
+                    self.CAN_NETWORK.disconnect()
+                except Exception:
+                    pass
+                self.CAN_NODES.clear()
+
                 self.CAN_NETWORK.connect(bustype=bustype, channel=channel, bitrate=bitrate)
                 self._CONNECTED = True
-                if len (self.CAN_NODES) == 0:
+                if len(self.CAN_NODES) == 0:
                     try:
                         # Need at least four nodes to ensure all drives are connected
                         while len(self.CAN_NETWORK.scanner.nodes) < 4:
@@ -148,13 +156,19 @@ class RobuROC_Canopen(Node):
                         self.logger.info(f"Connected to CANBus with nodes: {node_list}")
                     except Exception as e:
                         self.logger.error(f"Unable to initialize nodes, Error: {e}")
+                        # Disconnect cleanly so the next retry can reconnect from scratch
+                        try:
+                            self.CAN_NETWORK.disconnect()
+                        except Exception:
+                            pass
+                        self.CAN_NODES.clear()
                         self._CONNECTED = False
             except Exception as error:
                 self.logger.error(f"Unable to connect to CAN Bus, Error: {error}")
                 self._CONNECTED = False
             finally:
-
                 return self._CONNECTED
+                
     def Disconnect(self):
         """
         Disconnection method for disconnection the CANBUS network and stopping/ending all
