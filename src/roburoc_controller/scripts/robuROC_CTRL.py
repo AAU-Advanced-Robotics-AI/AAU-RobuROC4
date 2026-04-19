@@ -63,7 +63,7 @@ class RobuROC_CTRL(Node):
 
         # Set up publisher
         self.WritePub = self.create_publisher(CANWrite, '/roburoc/CANWrite', 10)
-        self.SpeedPub = self.create_publisher(CANSubscribe, '/roburoc/Velocity', 10)
+        self.SpeedPub = self.create_publisher(CANSubscription, '/roburoc/Velocity', 10)
 
         # Set up service clients
         self.ConnectionSrvCli = self.create_client(CANConnection, '/roburoc/CANConnection')
