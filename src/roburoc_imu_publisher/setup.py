@@ -20,7 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'roburoc_imu_publisher = roburoc_imu_publisher.roburoc_imu_publisher_node:main'
+            'roburoc_imu_publisher = roburoc_imu_publisher.imu_publisher_node:main'
         ],
     },
 )
