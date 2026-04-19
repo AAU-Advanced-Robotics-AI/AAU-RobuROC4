@@ -105,11 +105,21 @@ class RobuROC_Canopen(Node):
                         response.node_list.append(node.id)
                     return response
             response.success = False
+            response.node_list = []
+            return response
         elif request.command.lower() == "disconnect":
             if self.Disconnect():
                 response.success = True
             else:
                 response.success = False
+            response.node_list = []
+            return response
+
+        self.logger.error(f"Unknown connection command: {request.command}")
+        response.success = False
+        response.node_list = []
+        return response
+    
     def Connect(self, bustype:str = 'pcan', channel:str = 'PCAN_USBBUS1', bitrate:int = 1000000):
         """
         Connection method for attempting to connect to the CANBUS network specified by bustype and channel at the specified
