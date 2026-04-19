@@ -26,6 +26,7 @@ from rclpy.node import Node
 from time import sleep
 from roburoc_canopen_interfaces.msg import CANWrite, CANSubscription
 from roburoc_canopen_interfaces.srv import CANRead, CANConnection, CANPeriodicTask, CANSubscribe
+from utils.COBID import COBID
 
 # Set logging level and output files
 logging.basicConfig(level=logging.ERROR)
@@ -42,6 +43,7 @@ class RobuROC_Canopen(Node):
     _DRIVE_CONFIG = os.path.join(os.path.dirname(__file__), "AMC_Digiflex_1.0.14.eds")
     CAN_NETWORK = canopen.Network()
     CAN_NODES = []
+    _COBID = COBID()
 
     def __init__(self):
         """
@@ -338,9 +340,33 @@ class RobuROC_Canopen(Node):
         """
         Subscription_message = CANSubscription()
         Subscription_message.cobid = COBID
-        Subscription_message.node_id = [node for node in self.CAN_NODES if COBID >> 7 == node.id][0]
+        node_id = self._resolve_node_id_from_cobid(COBID)
+        if node_id is None:
+            self.logger.warning(f"Unable to resolve node id for COBID {hex(COBID)}")
+            return
+        Subscription_message.node_id = node_id
         Subscription_message.data = list(data)
         self.SubscriptionPub.publish(Subscription_message)
+
+    def _resolve_node_id_from_cobid(self, cobid: int):
+        cobid_groups = [
+            self._COBID.CONTROL.ALL,
+            self._COBID.MODE.ALL,
+            self._COBID.ACT_VELOCITY.ALL,
+            self._COBID.ACT_CURRENT.ALL,
+            self._COBID.TARGET_VELOCITY.ALL,
+            self._COBID.TARGET_CURRENT.ALL,
+            self._COBID.SDO_WRITE.ALL,
+            self._COBID.SDO_READ.ALL,
+            self._COBID.HEARTBEAT.ALL,
+        ]
+
+        for group in cobid_groups:
+            if cobid in group:
+                return group.index(cobid) + 1
+
+        return None
+
     def Write_CB(self, message: CANWrite):
         """
         Write callback method for writing with different methods, depending on the desired target.

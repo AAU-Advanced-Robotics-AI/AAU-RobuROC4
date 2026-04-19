@@ -402,20 +402,20 @@ class RobuROC_CTRL(Node):
         :param message:
         :return: None
         """
+        handled = False
+
         if message.cobid in self._COBID.ACT_CURRENT.ALL:
             current = int.from_bytes(message.data, 'little', signed=True)
             current_amps = current * (pow(2, 13) / 40.0) # to amps
             self._CURRENT_PERIODIC[message.node_id-1] = current_amps
-        else:
-            self.logger.log(logging.ERROR, f"COBID {message.cobid} not recognised")
+            handled = True
 
         if message.cobid in self._COBID.ACT_VELOCITY.ALL:
             velocity = int.from_bytes(message.data, 'little', signed=True)
             velocity_mps = velocity / ((((pow(2, 17) / (2 * 20000) * pow(2, 19)) / 1000) * 32) * (((2.0 * 3.14) / 60.0) * 0.28)) # To MPS
             self._VELOCITY_PERIODIC[message.node_id-1] = velocity_mps
             self.SpeedPub.publish(message)
-        else:
-            self.logger.log(logging.ERROR, f"COBID {message.cobid} not recognized")
+            handled = True
 
         if message.cobid in self._COBID.HEARTBEAT.ALL:
             status = int.from_bytes(message.data, 'little', signed=True)
@@ -427,6 +427,10 @@ class RobuROC_CTRL(Node):
                 self._STATUS_PERIODIC[message.node_id-1] = 'PRE-OPERATIONAL'
             else:
                 self._STATUS_PERIODIC[message.node_id-1] = 'UNKNOWN'
+            handled = True
+
+        if not handled:
+            self.logger.warning(f"COBID {message.cobid} not recognised")
 def main():
     rclpy.init()
     ctrl = RobuROC_CTRL()
