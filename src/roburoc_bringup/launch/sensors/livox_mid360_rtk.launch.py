@@ -19,7 +19,6 @@ Usage (direct):
     ros2 launch roburoc_bringup sensors/livox_mid360_rtk.launch.py
 """
 
-import math
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -31,28 +30,6 @@ from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
-    # ── body → base_link static transform ────────────────────────────────────
-    # FAST-LIO publishes odom → body, where "body" is the MID360's IMU frame,
-    # which is physically coincident with livox_frame.
-    #
-    # The URDF defines base_link → livox_frame with translation t and rotation R
-    # (pitch only — roll=0, yaw=0).  To connect the trees we need the inverse:
-    #
-    #   body → base_link  =  inv(base_link → livox_frame)
-    #
-    # Inverse of (t, R):
-    #   rotation    = R^T  →  rpy = (0, -pitch, 0)
-    #   translation = -R^T · t
-    #
-    # URDF values (update both here and in livox_mid360_rtk.urdf.xacro together):
-    _t = (0.6625, 0.0, 0.645)   # base_link → livox_frame translation [m]
-    _pitch = 0.39373590         # base_link → livox_frame pitch angle [rad] (22.55° nose-up)
-    _cp, _sp = math.cos(_pitch), math.sin(_pitch)
-    # R^T · t  for a pure pitch rotation
-    _inv_x = -( _cp * _t[0] - _sp * _t[2])
-    _inv_y = -( _t[1])
-    _inv_z = -( _sp * _t[0] + _cp * _t[2])
-
     ublox_config = os.path.join(
         get_package_share_directory('ublox_gps'),
         'config',
@@ -61,34 +38,12 @@ def generate_launch_description():
 
     return LaunchDescription([
 
-        # ── body → base_link (FAST-LIO frame bridge) ─────────────────────────
-        # Bridges FAST-LIO's "body" (= livox IMU frame) to base_link, completing:
-        #   odom → body → base_link → {livox_frame, gps, chassis_link, …}
-        # Values are the analytic inverse of the base_link → livox_frame URDF joint.
-        # When pitch is updated in the URDF, update _t and _pitch above to match.
-        Node(
-            package='tf2_ros',
-            executable='static_transform_publisher',
-            name='body_to_base_link',
-            arguments=[
-                '--x',     str(_inv_x),
-                '--y',     str(_inv_y),
-                '--z',     str(_inv_z),
-                '--roll',  '0',
-                '--pitch', str(-_pitch),
-                '--yaw',   '0',
-                '--frame-id',       'body',
-                '--child-frame-id', 'base_link',
-            ],
-            output='screen',
-        ),
-
         # ── NTRIP connection arguments ────────────────────────────────────
         DeclareLaunchArgument('ntrip_host',       default_value='crtk.net',
                               description='NTRIP caster hostname'),
         DeclareLaunchArgument('ntrip_port',       default_value='2101',
                               description='NTRIP caster port'),
-        DeclareLaunchArgument('ntrip_mountpoint', default_value='HEGA',
+        DeclareLaunchArgument('ntrip_mountpoint', default_value='OVTA',
                               description='NTRIP mountpoint (Aalborg area)'),
         DeclareLaunchArgument('ntrip_version',    default_value='RTCM3',
                               description='NTRIP protocol version'),
