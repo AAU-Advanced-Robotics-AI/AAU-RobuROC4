@@ -47,6 +47,7 @@ def _launch_record(context, *args, **kwargs):
                 # (file-mode defers compression to exit, gets SIGKILL'd on large bags)
                 '--compression-mode', 'message',
                 '--compression-format', 'zstd',
+                '--compression-queue-size', '20',
                 '-o', bag_path,
             ],
             output='screen',
