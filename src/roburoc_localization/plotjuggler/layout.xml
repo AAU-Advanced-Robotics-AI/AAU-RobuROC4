@@ -3,45 +3,91 @@
  <tabbed_widget parent="main_window" name="Main Window">
   <Tab containers="1" tab_name="Trajectory Overview">
    <Container>
-    <DockSplitter count="2" sizes="0.744391;0.255609" orientation="-">
-     <DockArea name="...">
-      <plot mode="XYPlot" line_width="1.0" flip_y="false" flip_x="false">
-       <range left="-262.732012" bottom="-106.489247" top="66.400502" right="120.704579"/>
-       <limitY/>
-       <curve color="#bcbd22" name="/odometry/gps/pose/pose/position/[x;y]" curve_x="/odometry/gps/pose/pose/position/x" curve_y="/odometry/gps/pose/pose/position/y"/>
-       <curve color="#1f77b4" name="/Odometry/pose/pose/position/[x;y]" curve_x="/Odometry/pose/pose/position/x" curve_y="/Odometry/pose/pose/position/y"/>
-      </plot>
-     </DockArea>
-     <DockSplitter count="2" sizes="0.5;0.5" orientation="|">
+    <DockSplitter count="2" orientation="-" sizes="0.500401;0.499599">
+     <DockSplitter count="2" orientation="|" sizes="0.5;0.5">
       <DockArea name="...">
-       <plot mode="TimeSeries" line_width="1.0" flip_y="false" flip_x="false">
-        <range left="0.257660" bottom="-0.080704" top="3.455081" right="435.458028"/>
+       <plot mode="XYPlot" flip_x="false" line_width="1.0" flip_y="false">
+        <range left="-20.064106" right="379.168838" top="158.288377" bottom="-43.243800"/>
         <limitY/>
-        <curve color="#ff7f0e" name="/ublox_gps_node/fix/position_covariance[0]"/>
+        <curve curve_x="/Odometry/pose/pose/position/x" color="#1f77b4" name="/Odometry/pose/pose/position/[x;y]" curve_y="/Odometry/pose/pose/position/y"/>
+        <curve curve_x="/odometry/gps/pose/pose/position/x" color="#d62728" name="/odometry/gps/pose/pose/position/[x;y]" curve_y="/odometry/gps/pose/pose/position/y"/>
        </plot>
       </DockArea>
       <DockArea name="...">
-       <plot mode="TimeSeries" line_width="1.0" flip_y="false" flip_x="false">
-        <range left="0.257660" bottom="-156.848238" top="67.628770" right="435.458028"/>
+       <plot mode="TimeSeries" flip_x="false" line_width="1.0" flip_y="false">
+        <range left="0.257784" right="381.457784" top="1175.023038" bottom="-28.649658"/>
         <limitY/>
-        <curve color="#f14cc1" name="/Odometry/pose/pose/position/x"/>
-        <curve color="#9467bd" name="/odometry/gps/pose/pose/position/x"/>
+        <curve color="#1ac938" name="/ublox_gps_node/fix/position_covariance[0]"/>
+       </plot>
+      </DockArea>
+     </DockSplitter>
+     <DockSplitter count="3" orientation="|" sizes="0.332277;0.335446;0.332277">
+      <DockArea name="...">
+       <plot mode="TimeSeries" flip_x="false" line_width="1.0" flip_y="false">
+        <range left="0.257784" right="381.457784" top="367.765895" bottom="-8.661163"/>
+        <limitY/>
+        <curve color="#ff7f0e" name="/Odometry/pose/pose/position/x"/>
+        <curve color="#f14cc1" name="/odometry/gps/pose/pose/position/x"/>
+       </plot>
+      </DockArea>
+      <DockArea name="...">
+       <plot mode="TimeSeries" flip_x="false" line_width="1.0" flip_y="false">
+        <range left="0.257784" right="381.457784" top="118.312175" bottom="-3.267598"/>
+        <limitY/>
         <curve color="#9467bd" name="/Odometry/pose/pose/position/y"/>
         <curve color="#17becf" name="/odometry/gps/pose/pose/position/y"/>
+       </plot>
+      </DockArea>
+      <DockArea name="...">
+       <plot mode="TimeSeries" flip_x="false" line_width="1.0" flip_y="false">
+        <range left="0.257784" right="381.457784" top="7.488842" bottom="-0.183951"/>
+        <limitY/>
+        <curve color="#bcbd22" name="/Odometry/pose/pose/position/z"/>
+        <curve color="#1f77b4" name="/odometry/gps/pose/pose/position/z"/>
        </plot>
       </DockArea>
      </DockSplitter>
     </DockSplitter>
    </Container>
   </Tab>
-  <currentTabIndex index="0"/>
+  <Tab containers="1" tab_name="Position Detail">
+   <Container>
+    <DockSplitter count="2" orientation="-" sizes="0.499599;0.500401">
+     <DockArea name="...">
+      <plot mode="TimeSeries" flip_x="false" line_width="1.0" flip_y="false">
+       <range left="0.257784" right="381.457784" top="436.273050" bottom="-10.337850"/>
+       <limitY/>
+       <curve color="#0e25ff" name="/Odometry/pose/pose/position/x"/>
+       <curve color="#ff0400" name="/odometry/gps/pose/pose/position/x"/>
+       <curve color="#ff8e8a" name="gps_x_plus_2sigma"/>
+       <curve color="#ff8e8a" name="gps_x_minus_2sigma"/>
+       <curve color="#a7afff" name="fastlio_x_minus_2sigma"/>
+       <curve color="#a7afff" name="fastlio_x_plus_2sigma"/>
+      </plot>
+     </DockArea>
+     <DockArea name="...">
+      <plot mode="TimeSeries" flip_x="false" line_width="1.0" flip_y="false">
+       <range left="0.257784" right="381.457784" top="119.534228" bottom="-52.373123"/>
+       <limitY/>
+       <curve color="#001af4" name="/Odometry/pose/pose/position/y"/>
+       <curve color="#b6beff" name="fastlio_y_plus_2sigma"/>
+       <curve color="#b6beff" name="fast_lio_y_minus_2sigma"/>
+       <curve color="#cf1727" name="/odometry/gps/pose/pose/position/y"/>
+       <curve color="#ff939d" name="gps_y_plus_2sigma"/>
+       <curve color="#ff939d" name="gps_y_minus_2sigma"/>
+      </plot>
+     </DockArea>
+    </DockSplitter>
+   </Container>
+  </Tab>
+  <currentTabIndex index="1"/>
  </tabbed_widget>
  <use_relative_time_offset enabled="1"/>
  <!-- - - - - - - - - - - - - - - -->
  <!-- - - - - - - - - - - - - - - -->
  <Plugins>
   <plugin ID="DataLoad CSV">
-   <parameters delimiter="0" time_axis=""/>
+   <parameters time_axis="" delimiter="0"/>
   </plugin>
   <plugin ID="DataLoad MCAP"/>
   <plugin ID="DataLoad ROS2 bags">
@@ -50,7 +96,7 @@
    <max_array_size value="100"/>
    <boolean_strings_to_number value="true"/>
    <remove_suffix_from_strings value="true"/>
-   <selected_topics value="/Odometry;/odometry/gps;/ublox_gps_node/fix_velocity;/ublox_gps_node/fix"/>
+   <selected_topics value="/Odometry;/odometry/gps;/ublox_gps_node/fix;/ublox_gps_node/fix_velocity"/>
   </plugin>
   <plugin ID="DataLoad ULog"/>
   <plugin ID="ROS2 Topic Subscriber">
@@ -75,19 +121,83 @@
  </Plugins>
  <!-- - - - - - - - - - - - - - - -->
  <previouslyLoaded_Datafiles>
-  <fileInfo filename="../../../../../rosbags/roburoc_lio_20260424_203635_processed/metadata.yaml" prefix="">
-   <plugin ID="DataLoad ROS2 bags">
-    <use_header_stamp value="true"/>
-    <discard_large_arrays value="true"/>
-    <max_array_size value="100"/>
-    <boolean_strings_to_number value="true"/>
-    <remove_suffix_from_strings value="true"/>
-    <selected_topics value="/Odometry;/odometry/gps;/ublox_gps_node/fix_velocity;/ublox_gps_node/fix"/>
-   </plugin>
-  </fileInfo>
+  <fileInfo prefix="" filename="../../../../../rosbags/roburoc_lio_20260424_204417_processed_aligned/metadata.yaml"/>
  </previouslyLoaded_Datafiles>
  <!-- - - - - - - - - - - - - - - -->
- <customMathEquations/>
+ <customMathEquations>
+  <snippet name="fast_lio_y_minus_2sigma">
+   <global></global>
+   <function>return value - 2*math.sqrt(v1)</function>
+   <linked_source>/Odometry/pose/pose/position/y</linked_source>
+   <additional_sources>
+    <v1>/Odometry/pose/covariance/[1;1]</v1>
+   </additional_sources>
+  </snippet>
+  <snippet name="gps_y_plus_2sigma">
+   <global></global>
+   <function>return value + 2*math.sqrt(v1)</function>
+   <linked_source>/odometry/gps/pose/pose/position/y</linked_source>
+   <additional_sources>
+    <v1>/odometry/gps/pose/covariance/[1;1]</v1>
+   </additional_sources>
+  </snippet>
+  <snippet name="fastlio_y_plus_2sigma">
+   <global></global>
+   <function>return value + 2*math.sqrt(v1)</function>
+   <linked_source>/Odometry/pose/pose/position/y</linked_source>
+   <additional_sources>
+    <v1>/Odometry/pose/covariance/[0;0]</v1>
+   </additional_sources>
+  </snippet>
+  <snippet name="gps_x_plus_2sigma">
+   <global></global>
+   <function>return value + 2*math.sqrt(v1)</function>
+   <linked_source>/odometry/gps/pose/pose/position/x</linked_source>
+   <additional_sources>
+    <v1>/ublox_gps_node/fix/position_covariance[0]</v1>
+   </additional_sources>
+  </snippet>
+  <snippet name="gps_x_minus_2sigma">
+   <global></global>
+   <function>return value - 2*math.sqrt(v1)</function>
+   <linked_source>/odometry/gps/pose/pose/position/x</linked_source>
+   <additional_sources>
+    <v1>/odometry/gps/pose/covariance/[0;0]</v1>
+   </additional_sources>
+  </snippet>
+  <snippet name="fastlio_x_plus_2sigma">
+   <global></global>
+   <function>return value + 2*math.sqrt(v1)</function>
+   <linked_source>/Odometry/pose/pose/position/x</linked_source>
+   <additional_sources>
+    <v1>/Odometry/pose/covariance/[0;0]</v1>
+   </additional_sources>
+  </snippet>
+  <snippet name="gps_y_minus_2sigma">
+   <global></global>
+   <function>return value - 2*math.sqrt(v1)</function>
+   <linked_source>/odometry/gps/pose/pose/position/y</linked_source>
+   <additional_sources>
+    <v1>/odometry/gps/pose/covariance/[1;1]</v1>
+   </additional_sources>
+  </snippet>
+  <snippet name="fastlio_y_minus_2sigma">
+   <global></global>
+   <function>return value - 2*math.sqrt(v1)</function>
+   <linked_source>/Odometry/pose/pose/position/y</linked_source>
+   <additional_sources>
+    <v1>/Odometry/pose/covariance/[1;1]</v1>
+   </additional_sources>
+  </snippet>
+  <snippet name="fastlio_x_minus_2sigma">
+   <global></global>
+   <function>return value - 2*math.sqrt(v1)</function>
+   <linked_source>/Odometry/pose/pose/position/x</linked_source>
+   <additional_sources>
+    <v1>/Odometry/pose/covariance/[0;0]</v1>
+   </additional_sources>
+  </snippet>
+ </customMathEquations>
  <snippets/>
  <!-- - - - - - - - - - - - - - - -->
 </root>

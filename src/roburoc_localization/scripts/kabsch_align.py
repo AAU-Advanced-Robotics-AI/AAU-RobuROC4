@@ -1,14 +1,26 @@
 #!/usr/bin/env python3
 """
-kabsch_align.py — Post-hoc 2D alignment of FAST-LIO and GPS trajectories.
+kabsch_align.py — Post-hoc 2D alignment of LIO and GPS trajectories.
 
-Reads /Odometry and /odometry/gps from a processed bag, selects a clean
-segment (skip startup transient, require low GPS covariance, require steady
-motion), fits the optimal 2D rigid transform R, t mapping LIO → GPS via
-weighted Kabsch, and reports residuals.
+Reads /odometry/lio and /odometry/gps from a _processed bag (output of
+offline_odometry.launch.py).  Both topics are already in the odom frame, so
+the Kabsch result shows the residual error after gps_to_enu initial alignment.
 
-Optional: writes a new bag with /Odometry rewritten as the aligned trajectory
-so PlotJuggler can overlay them.
+Selects a clean segment (skip startup transient, require low GPS covariance,
+require steady motion), fits the optimal 2D rigid transform R, t mapping
+LIO → GPS via weighted Kabsch, and reports residuals.
+
+Optional: writes a new bag with /odometry/lio rewritten as the aligned
+trajectory so PlotJuggler can overlay them.
+
+When to run
+-----------
+  Run on a _processed bag to evaluate how well gps_to_enu's initial bearing
+  is aligned.  A large θ residual means the GPS bearing was locked at an
+  incorrect heading — consider adjusting gps_to_enu's bearing_samples or
+  speed_threshold.  A large translational residual that grows over time
+  suggests lever-arm drift — re-check the lever_arm_x/y values in
+  config/sensor_mount.yaml.
 
 Usage
 -----
@@ -17,6 +29,10 @@ Usage
 
   # Same, plus write an aligned output bag:
   python3 kabsch_align.py /path/to/bag_processed --write-aligned
+
+  # Override topics (e.g., on a _fastlio bag using raw FAST-LIO output):
+  python3 kabsch_align.py /path/to/bag_fastlio \
+      --lio-topic /Odometry --gps-topic /odometry/gps
 
 Requirements
 ------------
@@ -237,11 +253,11 @@ def report(R, t, theta, P, Q, weights, mask, full_lio, full_gps):
 # Optional: write aligned bag
 # ─────────────────────────────────────────────────────────────────────────────
 
-def write_aligned_bag(input_bag, output_bag, R, t):
+def write_aligned_bag(input_bag, output_bag, R, t, lio_topic='/odometry/lio'):
     """
-    Copy input bag verbatim, except rewrite /Odometry pose so it's aligned to
-    GPS.  Twist is rotated by R but origin-translated only via t (twist isn't
-    affected by translation, only rotation of frame).
+    Copy input bag verbatim, except rewrite `lio_topic` pose so it's aligned
+    to GPS.  Twist is rotated by R but origin-translated only via t (twist
+    isn't affected by translation, only rotation of frame).
 
     Note: header.frame_id stays as-is; only the numbers are corrected.  This
     is a comparison aid, not a corrected production stream.
@@ -272,7 +288,7 @@ def write_aligned_bag(input_bag, output_bag, R, t):
     n_rewritten = 0
     while reader.has_next():
         topic, data, ts = reader.read_next()
-        if topic == '/Odometry':
+        if topic == lio_topic:
             msg = rclpy.serialization.deserialize_message(data, Odometry)
             p = np.array([msg.pose.pose.position.x,
                           msg.pose.pose.position.y,
@@ -307,7 +323,7 @@ def write_aligned_bag(input_bag, output_bag, R, t):
 
         writer.write(topic, data, ts)
 
-    print(f'  Wrote aligned bag to {output_bag} ({n_rewritten} /Odometry messages rewritten)')
+    print(f'  Wrote aligned bag to {output_bag} ({n_rewritten} {lio_topic} messages rewritten)')
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -317,9 +333,11 @@ def write_aligned_bag(input_bag, output_bag, R, t):
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('bag', help='Path to processed bag (containing /Odometry and /odometry/gps).')
-    parser.add_argument('--lio-topic',       default='/Odometry')
-    parser.add_argument('--gps-topic',       default='/odometry/gps')
+    parser.add_argument('bag', help='Path to _processed bag (containing /odometry/lio and /odometry/gps).')
+    parser.add_argument('--lio-topic',       default='/odometry/lio',
+                        help='LIO odometry topic (default: /odometry/lio).')
+    parser.add_argument('--gps-topic',       default='/odometry/gps',
+                        help='GPS odometry topic (default: /odometry/gps).')
     parser.add_argument('--skip-distance',   type=float, default=DEFAULT_SKIP_DISTANCE,
                         help=f'Skip first N m of motion (default: {DEFAULT_SKIP_DISTANCE} m).')
     parser.add_argument('--segment-length',  type=float, default=DEFAULT_SEGMENT_LENGTH,
@@ -380,7 +398,7 @@ def main():
     if args.write_aligned:
         out_bag = bag + '_aligned'
         print(f'Writing aligned bag → {out_bag}')
-        write_aligned_bag(bag, out_bag, R, t_vec)
+        write_aligned_bag(bag, out_bag, R, t_vec, lio_topic=args.lio_topic)
 
 
 if __name__ == '__main__':
