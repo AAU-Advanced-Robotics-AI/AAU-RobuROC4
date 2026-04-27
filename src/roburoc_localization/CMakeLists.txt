@@ -10,7 +10,8 @@ install(DIRECTORY
 )
 
 install(PROGRAMS
-  scripts/gps_covariance_inflator.py
+  scripts/lio_relay.py
+  scripts/gps_relay.py
   scripts/gps_to_enu.py
   DESTINATION lib/${PROJECT_NAME}
 )

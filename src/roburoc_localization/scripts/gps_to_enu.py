@@ -9,11 +9,11 @@ Subscriptions
 -------------
   /ublox_gps_node/fix          (sensor_msgs/NavSatFix)
   /ublox_gps_node/fix_velocity (geometry_msgs/TwistWithCovarianceStamped, ENU)
-  /Odometry                    (nav_msgs/Odometry, FAST_LIO — for current yaw)
+  <odom_topic>                 (nav_msgs/Odometry, default /odometry/lio — for current yaw)
 
 Publication
 -----------
-  /odometry/gps  (nav_msgs/Odometry, frame_id=odom, child_frame_id=base_link)
+  /odometry/gps/raw  (nav_msgs/Odometry, frame_id=odom, child_frame_id=base_link)
 
 Algorithm
 ---------
@@ -31,7 +31,7 @@ Algorithm
            y_odom_antenna = -east·cos(H) + north·sin(H)
   4. Lever-arm correction — antenna → base_link:
        The GPS antenna is mounted at (lx, ly) in the base_link frame (from URDF).
-       Using the current robot yaw ψ from /Odometry:
+       Using the current robot yaw ψ from <odom_topic> (/odometry/lio):
            x_base = x_odom_antenna - (lx·cos ψ - ly·sin ψ)
            y_base = y_odom_antenna - (lx·sin ψ + ly·cos ψ)
        If no /Odometry yaw is available yet, the last known yaw (or 0.0) is used.
@@ -45,10 +45,14 @@ Parameters
   bearing_timeout   (float, default 15.0): Wall seconds to wait before falling back to ENU.
   lever_arm_x       (float, default -0.428): GPS antenna X in base_link frame (from URDF).
   lever_arm_y       (float, default  0.295): GPS antenna Y in base_link frame (from URDF).
+  odom_topic        (str,   default '/odometry/lio'): Odometry topic to read robot yaw from.
+                             Use /odometry/lio (lio_relay output, odom frame) — not /Odometry
+                             (raw FAST-LIO, camera_init frame) — to get the correct odom-frame
+                             yaw for lever-arm correction.
 
 Usage
 -----
-  Launched automatically by bag_process.launch.py.
+  Launched automatically by localization_replay.launch.py.
   To run standalone:
     ros2 run roburoc_localization gps_to_enu.py
 """
@@ -79,12 +83,14 @@ class GpsToEnu(Node):
         # Update these if the antenna is remounted.
         self.declare_parameter('lever_arm_x', -0.428)  # metres forward of base_link
         self.declare_parameter('lever_arm_y',  0.295)  # metres left   of base_link
+        self.declare_parameter('odom_topic', '/odometry/lio')
 
         self._speed_thr  = self.get_parameter('speed_threshold').value
         self._n_samples  = int(self.get_parameter('bearing_samples').value)
         self._timeout    = self.get_parameter('bearing_timeout').value
         self._lx         = self.get_parameter('lever_arm_x').value
         self._ly         = self.get_parameter('lever_arm_y').value
+        odom_topic       = self.get_parameter('odom_topic').value
 
         # ── State ─────────────────────────────────────────────────────────────
         self._lat0: float | None = None   # geodetic datum
@@ -98,8 +104,8 @@ class GpsToEnu(Node):
         # Wall-clock time at which datum was first set (for timeout)
         self._datum_wall_sec: float | None = None
 
-        # Current robot yaw in odom frame, updated from /Odometry.
-        # Defaults to 0.0 (used before first /Odometry message arrives).
+        # Current robot yaw in odom frame, updated from odom_topic (/odometry/lio).
+        # Defaults to 0.0 (used before the first message arrives).
         self._yaw: float = 0.0
 
         # ── I/O ───────────────────────────────────────────────────────────────
@@ -117,11 +123,11 @@ class GpsToEnu(Node):
         )
         self.create_subscription(
             Odometry,
-            '/Odometry',
+            odom_topic,
             self._odom_cb,
             10,
         )
-        self._pub = self.create_publisher(Odometry, '/odometry/gps', 10)
+        self._pub = self.create_publisher(Odometry, '/odometry/gps/raw', 10)
 
         # Timeout watchdog — fires at wall-clock rate regardless of sim time
         self._watchdog = self.create_timer(1.0, self._watchdog_cb)
@@ -262,8 +268,15 @@ class GpsToEnu(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    rclpy.spin(GpsToEnu())
-    rclpy.shutdown()
+    node = GpsToEnu()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == '__main__':
