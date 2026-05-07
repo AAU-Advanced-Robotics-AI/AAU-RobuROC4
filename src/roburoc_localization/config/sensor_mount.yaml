@@ -43,5 +43,5 @@ gps_antenna:
 
   # Lever arm for gps_to_enu.py: GPS antenna offset in base_link frame.
   # These must stay consistent with the x/y values above.
-  lever_arm_x: -0.428   # m (slightly different from mounting origin — phase centre)
-  lever_arm_y:  0.295   # m
+  lever_arm_x: -0.4775   # m
+  lever_arm_y:  0.285   # m

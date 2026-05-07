@@ -55,7 +55,7 @@ Notes
   - If <bag>_fastlio already exists, ros2 bag record will fail — delete it first.
   - Lower rate:=0.5 if FAST-LIO drops messages (watch for "drop message"
     warnings in the terminal).
-  - Ctrl-C once bag playback finishes to flush and close the output bag.
+  - The launch file shuts down automatically when bag playback finishes.
 """
 
 import os
@@ -106,7 +106,7 @@ def _launch_setup(context, *args, **kwargs):
             period=3.0,
             actions=[
                 LogInfo(msg=f'Starting bag replay at rate={rate}: {bag}'),
-                ExecuteProcess(
+                (bag_play := ExecuteProcess(
                     cmd=[
                         'ros2', 'bag', 'play', bag,
                         '--clock',
@@ -120,8 +120,16 @@ def _launch_setup(context, *args, **kwargs):
                         '/robot_description',
                     ],
                     output='screen',
-                ),
+                )),
             ],
+        ),
+
+        # ── Auto-shutdown when bag replay finishes ────────────────────────────────
+        RegisterEventHandler(
+            OnProcessExit(
+                target_action=bag_play,
+                on_exit=[LogInfo(msg='Bag replay finished — shutting down.'), Shutdown()],
+            )
         ),
     ]
 

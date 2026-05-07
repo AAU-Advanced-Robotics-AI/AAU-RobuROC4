@@ -67,11 +67,12 @@ class GpsRelay(Node):
 
     def _scale_msg(self, msg: Odometry, scale: float) -> Odometry:
         out = Odometry()
-        out.header          = msg.header
-        out.child_frame_id  = msg.child_frame_id
-        out.pose.pose       = msg.pose.pose
-        out.twist           = msg.twist
-        out.pose.covariance = [v * scale for v in msg.pose.covariance]
+        out.header           = msg.header
+        out.child_frame_id   = msg.child_frame_id
+        out.pose.pose        = msg.pose.pose
+        out.twist.twist      = msg.twist.twist
+        out.pose.covariance  = [v * scale for v in msg.pose.covariance]
+        out.twist.covariance = [v * scale for v in msg.twist.covariance]
         return out
 
     def _callback(self, msg: Odometry) -> None:

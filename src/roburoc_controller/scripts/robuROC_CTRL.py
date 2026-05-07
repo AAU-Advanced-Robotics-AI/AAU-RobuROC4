@@ -189,7 +189,8 @@ class RobuROC_CTRL(Node):
         the use of a dead-man switch. The following are the available commands:
 
         - '▲' + Left Stick: Set wheel speeds based on linear and angular axes. ('▲' is the dead-man switch)
-        - '▲' + R2 + Left Stick: Turbo mode — doubles max speed to TURBO_SPEED (2 m/s). Release R2 to return to MAX_SPEED (1 m/s).
+        - '▲' + D-pad: Same as left stick but using the D-pad arrows for directional input. D-pad takes priority when active.
+        - '▲' + R2 + Left Stick / D-pad: Turbo mode — doubles max speed to TURBO_SPEED (2 m/s). Release R2 to return to MAX_SPEED (1 m/s).
         - `■`: Brakes the vehicle.
         - `⬤`: Recovers from an error state or after re-enabling the security measures
         :param message:
@@ -201,11 +202,22 @@ class RobuROC_CTRL(Node):
             turbo = (len(message.axes) > 5 and message.axes[5] < 0) or \
                     (len(message.buttons) > 7 and message.buttons[7] == 1)
             speed_multiplier = self.TURBO_SPEED if turbo else self.MAX_SPEED
-            if turbo:
-                self.logger.info(f"Turbo mode active: max speed {self.TURBO_SPEED} m/s")
-            left, right = None, None
-            left = round(message.axes[1] - message.axes[0]/ 4, 4) * speed_multiplier
-            right = -round(message.axes[1] + message.axes[0]/ 4, 4) * speed_multiplier
+
+            stick_x = message.axes[0] if len(message.axes) > 0 else 0.0
+            stick_y = message.axes[1] if len(message.axes) > 1 else 0.0
+            dpad_x = message.axes[6] if len(message.axes) > 6 else 0.0
+            dpad_y = message.axes[7] if len(message.axes) > 7 else 0.0
+
+            # D-pad takes priority when active; fall back to left stick otherwise
+            if dpad_x != 0.0 or dpad_y != 0.0:
+                linear = dpad_y
+                angular = dpad_x   # axes[6]: left=+1, right=-1 — same convention as axes[0]
+            else:
+                linear = stick_y
+                angular = stick_x
+
+            left = round(linear - angular / 4, 4) * speed_multiplier
+            right = -round(linear + angular / 4, 4) * speed_multiplier
             vel_MPS = int(left * (self._SCALE_VELOCITY / self._SCALE_RPM_TO_MPS))
             vel2_MPS = int(right * (self._SCALE_VELOCITY / self._SCALE_RPM_TO_MPS))
             vel_MPS = list(bytearray(vel_MPS.to_bytes(4, byteorder='little', signed=True)))

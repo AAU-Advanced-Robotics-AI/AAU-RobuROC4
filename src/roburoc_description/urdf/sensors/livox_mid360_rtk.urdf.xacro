@@ -39,7 +39,7 @@
     <joint name="mid360_joint" type="fixed">
         <parent link="base_link"/>
         <child  link="livox_frame"/>
-        <origin xyz="0.60 0.0 0.7625" rpy="0 0.44457789 0"/>
+        <origin xyz="0.60 0.0 0.7625" rpy="0 0.43618904 0"/>
     </joint>
 
     <!-- ── u-blox ZED-F9P RTK antenna ───────────────────────────────────── -->

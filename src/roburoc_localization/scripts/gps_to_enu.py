@@ -79,6 +79,7 @@ class GpsToEnu(Node):
         self.declare_parameter('speed_threshold', 0.3)
         self.declare_parameter('bearing_samples', 5)
         self.declare_parameter('bearing_timeout', 15.0)
+        self.declare_parameter('vel_max_age', 0.05)  # seconds; drop cached velocity if older
         # Lever arm: GPS antenna position expressed in base_link frame (from URDF).
         # Update these if the antenna is remounted.
         self.declare_parameter('lever_arm_x', -0.428)  # metres forward of base_link
@@ -88,6 +89,7 @@ class GpsToEnu(Node):
         self._speed_thr  = self.get_parameter('speed_threshold').value
         self._n_samples  = int(self.get_parameter('bearing_samples').value)
         self._timeout    = self.get_parameter('bearing_timeout').value
+        self._vel_max_age = self.get_parameter('vel_max_age').value
         self._lx         = self.get_parameter('lever_arm_x').value
         self._ly         = self.get_parameter('lever_arm_y').value
         odom_topic       = self.get_parameter('odom_topic').value
@@ -107,6 +109,9 @@ class GpsToEnu(Node):
         # Current robot yaw in odom frame, updated from odom_topic (/odometry/lio).
         # Defaults to 0.0 (used before the first message arrives).
         self._yaw: float = 0.0
+
+        # Latest fix_velocity message; updated on every callback for twist population.
+        self._last_vel: TwistWithCovarianceStamped | None = None
 
         # ── I/O ───────────────────────────────────────────────────────────────
         self.create_subscription(
@@ -152,8 +157,9 @@ class GpsToEnu(Node):
     # ── Velocity callback: bearing estimation ────────────────────────────────
 
     def _vel_cb(self, msg: TwistWithCovarianceStamped) -> None:
+        self._last_vel = msg                    # always cache latest velocity
         if self._bearing is not None:
-            return                              # already locked
+            return                              # bearing already locked; nothing else to do
 
         v_east  = msg.twist.twist.linear.x     # ENU East
         v_north = msg.twist.twist.linear.y     # ENU North
@@ -243,6 +249,40 @@ class GpsToEnu(Node):
         odom.pose.covariance[0]  = msg.position_covariance[0]   # xx ≈ east var
         odom.pose.covariance[7]  = msg.position_covariance[4]   # yy ≈ north var
         odom.pose.covariance[14] = 0.01                         # zz fixed
+
+        # Velocity: rotate fix_velocity into the publishing frame and populate twist.
+        # Gate on timestamp age relative to this fix to avoid merging stale data.
+        fix_sec = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+        vel_fresh = (
+            self._last_vel is not None
+            and abs(fix_sec - (self._last_vel.header.stamp.sec
+                               + self._last_vel.header.stamp.nanosec * 1e-9))
+            <= self._vel_max_age
+        )
+        if vel_fresh:
+            lv = self._last_vel.twist.twist.linear
+            c  = self._last_vel.twist.covariance    # 6×6 row-major
+            if self._fallen_back:
+                # No bearing available — pass ENU velocity through unchanged
+                odom.twist.twist.linear.x = lv.x   # vEast
+                odom.twist.twist.linear.y = lv.y   # vNorth
+                odom.twist.covariance     = list(c)
+            else:
+                # Rotate ENU velocity → odom frame using bearing H
+                # R = [[sH, cH], [-cH, sH]]
+                H        = self._bearing
+                sH, cH   = math.sin(H), math.cos(H)
+                odom.twist.twist.linear.x =  lv.x * sH + lv.y * cH
+                odom.twist.twist.linear.y = -lv.x * cH + lv.y * sH
+                # Rotate 2×2 horizontal covariance: C_odom = R·C_enu·R^T
+                cee, cen = c[0], c[1]
+                cne, cnn = c[6], c[7]
+                rc00 =  sH * cee + cH * cne;  rc01 =  sH * cen + cH * cnn
+                rc10 = -cH * cee + sH * cne;  rc11 = -cH * cen + sH * cnn
+                odom.twist.covariance[0] =  rc00 * sH  + rc01 *  cH   # vx-vx
+                odom.twist.covariance[1] =  rc00 * (-cH) + rc01 * sH  # vx-vy
+                odom.twist.covariance[6] =  rc10 * sH  + rc11 *  cH   # vy-vx
+                odom.twist.covariance[7] =  rc10 * (-cH) + rc11 * sH  # vy-vy
 
         self._pub.publish(odom)
 

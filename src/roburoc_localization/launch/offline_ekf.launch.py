@@ -92,7 +92,7 @@ def _launch_setup(context, *args, **kwargs):
     out_bag = bag.removesuffix('_odometry') + '_ekf'
 
     loc_config = os.path.join(
-        get_package_share_directory('roburoc_localization'), 'config', 'localization.yaml'
+        get_package_share_directory('roburoc_localization'), 'config', 'debug_localization.yaml'
     )
 
     nodes = [
@@ -187,7 +187,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'rate',
-            default_value='5.0',
+            default_value='15.0',
             description=(
                 'Bag playback rate.  The EKF has trivial CPU cost; '
                 '5-10x is typically achievable on the NUC.'

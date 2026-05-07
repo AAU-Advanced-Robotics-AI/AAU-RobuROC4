@@ -42,6 +42,7 @@ def _launch_record(context, *args, **kwargs):
             cmd=[
                 'ros2', 'bag', 'record',
                 '--all',
+                '--max-bag-duration', '60',
                 # Per-message compression: each message compressed on write,
                 # so Ctrl+C gives a valid bag even on large recordings.
                 # (file-mode defers compression to exit, gets SIGKILL'd on large bags)

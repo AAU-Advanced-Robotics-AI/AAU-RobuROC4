@@ -1,0 +1,125 @@
+###############################################################################
+# robot_localization — STEP 1 tuning config
+#
+# Goal: prove the LIO → ekf_local plumbing works in isolation before adding GPS.
+#
+# What's stripped from the production config:
+#   - 2D mode ON       (z, roll, pitch, and their derivatives forced to 0)
+#   - GPS commented out (single sensor only)
+#   - ekf_global removed (focus only on odom → base_link)
+#   - navsat_transform removed (no GPS pipeline needed yet)
+#   - gps_relay removed (no GPS to scale)
+#
+# What to look for when replaying a bag:
+#   In PlotJuggler, plot together:
+#     /odometry/lio       (LIO relay output)        — reference
+#     /odometry/filtered  (ekf_local output)        — should track LIO closely
+#
+#   Expected behavior:
+#     - XY trajectory of /odometry/filtered visually overlays /odometry/lio
+#     - Yaw should track within a few millirad
+#     - No divergence, no covariance explosion in /odometry/filtered.pose.covariance
+#
+#   If the filtered output drifts away from LIO:        Q (process noise) too high
+#   If the filtered output lags or stutters:            rejection thresholds too tight
+#                                                       or transform_timeout biting
+#   If the filtered output explodes:                    differential flag wrong,
+#                                                       or LIO frame_id mismatch
+###############################################################################
+
+# ─── LIO relay ──────────────────────────────────────────────────────────────
+lio_relay:
+  ros__parameters:
+    cov_pos:   0.1
+    cov_rot:   0.05
+    cov_vel:   0.05
+    cov_omega: 0.01
+
+# ─── Local EKF ──────────────────────────────────────────────────────────────
+# Single sensor, 2D mode. With differential: true, the EKF integrates LIO
+# pose deltas — output should essentially mirror LIO motion.
+ekf_local:
+  ros__parameters:
+    frequency: 50.0
+    sensor_timeout: 5.0
+    two_d_mode: true                     # 2D for tuning simplicity
+    transform_time_offset: 0.0
+    transform_timeout: 0.05              # was 0.0 — small slack for TF lag
+    print_diagnostics: true
+    debug: false
+    publish_tf: true
+    publish_acceleration: false
+    predict_to_current_time: true
+
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: base_link
+    world_frame: odom
+
+    # ── Sensor 0: LIO relay ─────────────────────────────────────────────────
+    # differential: true — fuse incremental motion (delta between consecutive
+    # poses), avoids any frame_id commitment. Standard pattern for LIO/wheel
+    # odometry feeding ekf_local.
+    odom0: /odometry/lio
+    odom0_config: [true,  true,  false,   # x, y  (z zeroed by 2D mode)
+                   false, false, true,    # yaw only
+                   false, false, false,   # FAST-LIO2 doesn't publish twist
+                   false, false, false,
+                   false, false, false]
+    odom0_queue_size: 10
+    odom0_nodelay: true
+    odom0_differential: false              # FIXED: was false — main bug
+    odom0_relative: false
+    odom0_pose_rejection_threshold: 2.0
+    odom0_twist_rejection_threshold: 0.2
+
+    # ── Sensor 1: GPS — DISABLED for step 1 ─────────────────────────────────
+    # Re-enable in step 2 once the LIO-only plumbing is verified.
+    #
+    odom1: /odometry/gps/local
+    odom1_config: [true,  true,  false,
+                   false, false, false,
+                   false, false, false,
+                   false, false, false,
+                   false, false, false]
+    odom1_queue_size: 10
+    odom1_nodelay: true
+    odom1_differential: false           # GPS is absolute — never differential
+    odom1_relative: false
+    odom1_pose_rejection_threshold: 2.0
+
+    # Process noise — template defaults. Don't tune these yet; first verify
+    # the LIO pass-through works. Tune Q in step 3 using NIS / innovation plots.
+    process_noise_covariance:
+      [1e-2,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    1e-2,   0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    1e-2,   0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.3,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.3,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.01,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.5,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.5,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.5,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    3.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    3.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    3.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    3.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    3.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    3.0]
+
+    initial_estimate_covariance:
+      [1e-9,  0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   1e-9,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    1e-9,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    1e-9,   0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     1.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     1.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     1.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    1.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    1.0]
