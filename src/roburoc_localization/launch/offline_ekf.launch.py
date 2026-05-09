@@ -166,6 +166,7 @@ def _launch_setup(context, *args, **kwargs):
                     '/odometry/gps',           # pass-through (global EKF anchor)
                     '/odometry/gps/local',     # pass-through (local EKF soft leash)
                     '/odometry/lio',           # pass-through for comparison
+                    '/diagnostics',
                     '--use-sim-time',
                 ],
                 output='screen',

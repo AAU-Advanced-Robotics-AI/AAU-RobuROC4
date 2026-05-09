@@ -68,7 +68,7 @@ ekf_local:
                    false, false, false]
     odom0_queue_size: 10
     odom0_nodelay: true
-    odom0_differential: false              # FIXED: was false — main bug
+    odom0_differential: true              # FIXED: was false — main bug
     odom0_relative: false
     odom0_pose_rejection_threshold: 2.0
     odom0_twist_rejection_threshold: 0.2
@@ -126,6 +126,130 @@ ekf_local:
        0.0,   0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
        0.0,   0.0,    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
        0.0,   0.0,    0.0,    0.0,    0.0,    1e-9,   0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     1.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     1.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     1.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    1.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    1.0]
+
+# ─── Global EKF ─────────────────────────────────────────────────────────────
+# Publishes:  map → odom  (TF) + /odometry/filtered/global
+# Purpose:    GPS-only sanity check — LIO disabled, filter tracks raw GPS.
+#
+# Sensor mix (GPS-only mode):
+#   • /odometry/gps  (differential=false — absolute position)
+#         RTK GPS position at raw receiver covariance.  Sole position source.
+#   • /ublox_gps_node/fix_velocity  (Doppler, vx/vy only)
+#         GPS Doppler velocity for dead-reckoning between position fixes.
+#
+# LIO (odom0) is commented out so we can see the raw GPS track in the map
+# frame without any LIO influence.  Re-enable odom0 once the GPS track
+# visually overlays the LIO track in PlotJuggler.
+ekf_global:
+  ros__parameters:
+    frequency: 50.0
+    sensor_timeout: 5.0
+    two_d_mode: true                     # 2D for tuning simplicity
+    transform_time_offset: 0.0
+    transform_timeout: 0.05              # was 0.0 — small slack for TF lag
+    print_diagnostics: true
+    debug: false
+    publish_tf: true
+    publish_acceleration: false
+    predict_to_current_time: true
+
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: base_link
+    world_frame: map
+
+    # ── Sensor 0: LIO relay — bootstrap only ────────────────────────────────
+    # robot_localization won't publish map→odom until the filter initializes,
+    # and it can't initialize from an absolute GPS measurement without a
+    # pre-existing map→odom — deadlock.  LIO in differential mode breaks the
+    # deadlock: the first LIO message sets the origin (no TF lookup needed),
+    # the filter initializes, map→odom is published, and GPS can then be fused.
+    # Tight rejection threshold (0.5 m) means GPS dominates any time it's
+    # consistent with the state; LIO only fills the gaps between GPS fixes.
+    odom0: /odometry/lio
+    odom0_config: [true,  true,  false,   # x, y  (z zeroed by 2D mode)
+                   false, false, true,    # yaw only
+                   false, false, false,   # FAST-LIO2 doesn't publish twist
+                   false, false, false,
+                   false, false, false]
+    odom0_queue_size: 10
+    odom0_nodelay: true
+    odom0_differential: true
+    odom0_relative: false
+    odom0_pose_rejection_threshold: 4.0
+    odom0_twist_rejection_threshold: 4.0
+
+    # ── Sensor 1: GPS absolute position (frame_id: map) ──────────────────────
+    # gps_relay overrides frame_id to 'map' on this topic.  That avoids the
+    # circular TF dependency: ekf_global (world_frame=map) receiving frame_id=odom
+    # must look up map→odom — which it itself publishes — causing divergence.
+    # With frame_id=map the EKF uses an identity transform; no feedback loop.
+    # The GPS coordinates are valid in the map frame because gps_to_enu builds
+    # a fixed inertial frame (origin = robot start, x = initial heading) which
+    # is exactly what the map frame is bootstrapped to.
+    odom1: /odometry/gps
+    odom1_config: [true,  true,  false,
+                   false, false, false,
+                   false, false, false,
+                   false, false, false,
+                   false, false, false]
+    odom1_queue_size: 10
+    odom1_nodelay: true
+    odom1_differential: false           # absolute — frame_id=map avoids circular TF
+    odom1_relative: false
+    odom1_pose_rejection_threshold: 4.0
+
+    # ── Sensor 2: GPS Doppler velocity — not present in _odometry bag ────────
+    # Re-enable when running against a bag that contains /ublox_gps_node/fix_velocity.
+    #
+    #odom2: /ublox_gps_node/fix_velocity
+    #odom2_config: [false, false, false,
+    #               false, false, false,
+    #               true,  true,  false,
+    #               false, false, false,
+    #               false, false, false]
+    #odom2_queue_size: 10
+    #odom2_nodelay: true
+    #odom2_differential: false
+    #odom2_relative: false
+    #odom2_pose_rejection_threshold: 0.2
+    #odom2_twist_rejection_threshold: 1.0
+
+    # Process noise — template defaults. Don't tune these yet; first verify
+    # the LIO pass-through works. Tune Q in step 3 using NIS / innovation plots.
+    process_noise_covariance:
+      [1e-3,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    1e-3,   0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    1e-2,   0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.3,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.3,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    1e-2,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1e-1,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     1e-1,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.5,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    3.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    3.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.05,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    1e-2,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    1e-2,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1e-2]
+
+    initial_estimate_covariance:
+      [1e6,  0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   1e6,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    1e-9,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    1e3,   0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
        0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
        0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
        0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,

@@ -65,9 +65,11 @@ class GpsRelay(Node):
             f'gps_relay ready — '
             f'scale_local={self._scale_local}, scale_global={self._scale_global}')
 
-    def _scale_msg(self, msg: Odometry, scale: float) -> Odometry:
+    def _scale_msg(self, msg: Odometry, scale: float, frame_id: str | None = None) -> Odometry:
         out = Odometry()
         out.header           = msg.header
+        if frame_id is not None:
+            out.header.frame_id = frame_id
         out.child_frame_id   = msg.child_frame_id
         out.pose.pose        = msg.pose.pose
         out.twist.twist      = msg.twist.twist
@@ -76,8 +78,13 @@ class GpsRelay(Node):
         return out
 
     def _callback(self, msg: Odometry) -> None:
+        # Global EKF (world_frame=map): frame_id must be 'map' to avoid the
+        # circular TF dependency where ekf_global would look up map→odom using
+        # the transform it itself publishes, causing exponential divergence.
+        # GPS coordinates from gps_to_enu are computed in a fixed inertial frame
+        # (origin = robot start, x = initial heading) — that IS the map frame.
         self._pub_local.publish(self._scale_msg(msg, self._scale_local))
-        self._pub_global.publish(self._scale_msg(msg, self._scale_global))
+        self._pub_global.publish(self._scale_msg(msg, self._scale_global, frame_id='map'))
 
 
 def main(args=None):
