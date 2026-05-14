@@ -89,7 +89,9 @@ def _launch_setup(context, *args, **kwargs):
     rate   = context.launch_configurations['rate']
     record = context.launch_configurations['record'].lower() in ('true', '1', 'yes')
 
-    out_bag = bag.removesuffix('_odometry') + '_ekf'
+    # Strip _odometry or _odometry_aligned suffix so the output is always *_ekf.
+    import re as _re
+    out_bag = _re.sub(r'_odometry(_aligned)?$', '', bag) + '_ekf'
 
     loc_config = os.path.join(
         get_package_share_directory('roburoc_localization'), 'config', 'debug_localization.yaml'

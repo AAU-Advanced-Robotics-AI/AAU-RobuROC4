@@ -167,15 +167,16 @@ ekf_global:
     base_link_frame: base_link
     world_frame: map
 
-    # ── Sensor 0: LIO relay — bootstrap only ────────────────────────────────
-    # robot_localization won't publish map→odom until the filter initializes,
-    # and it can't initialize from an absolute GPS measurement without a
-    # pre-existing map→odom — deadlock.  LIO in differential mode breaks the
-    # deadlock: the first LIO message sets the origin (no TF lookup needed),
-    # the filter initializes, map→odom is published, and GPS can then be fused.
-    # Tight rejection threshold (0.5 m) means GPS dominates any time it's
-    # consistent with the state; LIO only fills the gaps between GPS fixes.
-    odom0: /odometry/lio
+    # ── Sensor 0: LIO absolute pose (frame_id: map) ─────────────────────────
+    # /odometry/lio/global has frame_id=map and differential=false.
+    # This is the primary position anchor.  With cov_pos=0.1 m² the
+    # steady-state P stabilises at ~0.1 m², giving Kalman gains of:
+    #   RTK-fixed GPS (R≈4e-4 m²):  K_GPS ≈ 0.999  → GPS completely overrides LIO
+    #   Bad GPS       (R≈80 m²):    K_GPS ≈ 0.001  → LIO holds the map frame steady
+    # Using LIO differential instead breaks this: differential mode provides no
+    # absolute position anchor, so P is set entirely by Q and GPS, and bad GPS
+    # (even with K≈0.003) accumulates ~10 m of drift over 30 s of corrections.
+    odom0: /odometry/lio/global
     odom0_config: [true,  true,  false,   # x, y  (z zeroed by 2D mode)
                    false, false, true,    # yaw only
                    false, false, false,   # FAST-LIO2 doesn't publish twist
@@ -183,7 +184,7 @@ ekf_global:
                    false, false, false]
     odom0_queue_size: 10
     odom0_nodelay: true
-    odom0_differential: true
+    odom0_differential: false            # absolute — frame_id=map, no TF lookup needed
     odom0_relative: false
     odom0_pose_rejection_threshold: 4.0
     odom0_twist_rejection_threshold: 4.0
@@ -244,8 +245,13 @@ ekf_global:
        0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1e-2]
 
     initial_estimate_covariance:
-      [1e6,  0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
-       0.0,   1e6,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+      # xy set to 1.0 (not 1e6) — with LIO/global as absolute anchor the filter
+      # initialises from the first LIO message.  1e6 was needed when GPS was the
+      # only absolute source (it told the EKF "I have no idea where I am, trust
+      # the first measurement completely") but with LIO it just means the first
+      # bad GPS measurement at K≈1 locks the state before LIO arrives.
+      [1.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   1.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
        0.0,   0.0,    1e-9,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
        0.0,   0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
        0.0,   0.0,    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,

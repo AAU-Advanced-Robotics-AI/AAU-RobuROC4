@@ -55,7 +55,7 @@ from nav_msgs.msg import Odometry
 
 # ── Defaults — tune via CLI flags ───────────────────────────────────────────
 DEFAULT_SKIP_DISTANCE   = 0.0   # m — discard first N metres of motion (startup transient)
-DEFAULT_MAX_GPS_SIGMA   = 0.05   # m — reject GPS samples with σ > this (RTK-fix only)
+DEFAULT_MAX_GPS_SIGMA   = 0.50   # m — reject GPS samples with σ > this (RTK: ~0.02 m, GNSS float: ~0.10–0.50 m)
 DEFAULT_MIN_SPEED       = 0.4    # m/s — require steady forward motion
 DEFAULT_SEGMENT_LENGTH  = 50.0   # m — length of fitting segment (after skip)
 DEFAULT_TIME_TOL        = 0.05   # s — max time gap when matching LIO ↔ GPS samples
@@ -98,7 +98,8 @@ def read_odometry_topic(bag_path: str, topic: str):
         sxx = msg.pose.covariance[0]
         syy = msg.pose.covariance[7]
         out.append((t, x, y, sxx, syy))
-    return np.array(out, dtype=np.float64)
+    arr = np.array(out, dtype=np.float64)
+    return arr.reshape(-1, 5)  # ensure shape is (N, 5) even when empty
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -253,15 +254,22 @@ def report(R, t, theta, P, Q, weights, mask, full_lio, full_gps):
 # Optional: write aligned bag
 # ─────────────────────────────────────────────────────────────────────────────
 
-def write_aligned_bag(input_bag, output_bag, R, t, lio_topic='/odometry/lio'):
+def write_aligned_bag(input_bag, output_bag, R, t, lio_topics=None):
     """
-    Copy input bag verbatim, except rewrite `lio_topic` pose so it's aligned
-    to GPS.  Twist is rotated by R but origin-translated only via t (twist
-    isn't affected by translation, only rotation of frame).
+    Copy input bag verbatim, except rewrite every topic in `lio_topics` so
+    their poses are aligned to GPS.  Both /odometry/lio (used by ekf_local)
+    and /odometry/lio/global (used by ekf_global as an absolute anchor) must
+    receive the same correction so both EKF stages start from a consistent
+    frame.
 
-    Note: header.frame_id stays as-is; only the numbers are corrected.  This
-    is a comparison aid, not a corrected production stream.
+    Twist is left untouched — it is in the body frame (child_frame_id) so it
+    is unaffected by a rotation of the world/odom frame.
+
+    Note: header.frame_id stays as-is; only the numbers are corrected.
     """
+    if lio_topics is None:
+        lio_topics = ['/odometry/lio']
+    lio_topics_set = set(lio_topics)
     if Path(output_bag).exists():
         raise RuntimeError(f'Output bag already exists: {output_bag}')
 
@@ -285,10 +293,10 @@ def write_aligned_bag(input_bag, output_bag, R, t, lio_topic='/odometry/lio'):
     R3[:2, :2] = R
     t3 = np.array([t[0], t[1], 0.0])
 
-    n_rewritten = 0
+    n_rewritten: dict = {tp: 0 for tp in lio_topics_set}
     while reader.has_next():
         topic, data, ts = reader.read_next()
-        if topic == lio_topic:
+        if topic in lio_topics_set:
             msg = rclpy.serialization.deserialize_message(data, Odometry)
             p = np.array([msg.pose.pose.position.x,
                           msg.pose.pose.position.y,
@@ -319,11 +327,13 @@ def write_aligned_bag(input_bag, output_bag, R, t, lio_topic='/odometry/lio'):
             # odom frames does NOT affect twist values.  Leave untouched.
 
             data = rclpy.serialization.serialize_message(msg)
-            n_rewritten += 1
+            n_rewritten[topic] += 1
 
         writer.write(topic, data, ts)
 
-    print(f'  Wrote aligned bag to {output_bag} ({n_rewritten} {lio_topic} messages rewritten)')
+    for tp, count in sorted(n_rewritten.items()):
+        print(f'  Rewrote {count} messages on {tp}')
+    print(f'  Aligned bag written to {output_bag}')
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -358,6 +368,12 @@ def main():
     lio = read_odometry_topic(bag, args.lio_topic)
     gps = read_odometry_topic(bag, args.gps_topic)
     print(f'  {len(lio)} LIO samples, {len(gps)} GPS samples')
+
+    if len(gps) == 0:
+        sys.exit(f'No GPS odometry samples found on topic {args.gps_topic} — '
+                 f'cannot perform alignment (GPS may not have initialised).')
+    if len(lio) == 0:
+        sys.exit(f'No LIO odometry samples found on topic {args.lio_topic}.')
 
     # Time-match GPS to nearest LIO
     lio_xy, gps_xy, gps_sigma, t = match_by_time(lio, gps, args.time_tol)
@@ -398,7 +414,13 @@ def main():
     if args.write_aligned:
         out_bag = bag + '_aligned'
         print(f'Writing aligned bag → {out_bag}')
-        write_aligned_bag(bag, out_bag, R, t_vec, lio_topic=args.lio_topic)
+        # Rewrite both LIO topics: /odometry/lio feeds ekf_local (differential)
+        # and /odometry/lio/global feeds ekf_global (absolute anchor).  Both
+        # are in the same odom/LIO frame and need the same correction.
+        lio_topics_to_align = [args.lio_topic, '/odometry/lio/global']
+        # Deduplicate in case --lio-topic was already /odometry/lio/global
+        lio_topics_to_align = list(dict.fromkeys(lio_topics_to_align))
+        write_aligned_bag(bag, out_bag, R, t_vec, lio_topics=lio_topics_to_align)
 
 
 if __name__ == '__main__':
