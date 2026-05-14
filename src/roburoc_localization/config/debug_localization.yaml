@@ -1,39 +1,59 @@
 ###############################################################################
-# robot_localization — STEP 1 tuning config
+# robot_localization — active tuning config (offline_ekf.launch.py)
 #
-# Goal: prove the LIO → ekf_local plumbing works in isolation before adding GPS.
+# Sensor mix:
+#   ekf_local  — LIO differential + GPS Doppler velocity
+#                world_frame=odom  →  odom → base_link TF
+#   ekf_global — LIO absolute (map frame) + GPS absolute position
+#                world_frame=map   →  map → odom TF
 #
-# What's stripped from the production config:
-#   - 2D mode ON       (z, roll, pitch, and their derivatives forced to 0)
-#   - GPS commented out (single sensor only)
-#   - ekf_global removed (focus only on odom → base_link)
-#   - navsat_transform removed (no GPS pipeline needed yet)
-#   - gps_relay removed (no GPS to scale)
+# 2D mode is ON in both EKFs (agricultural field — flat enough).
 #
-# What to look for when replaying a bag:
-#   In PlotJuggler, plot together:
-#     /odometry/lio       (LIO relay output)        — reference
-#     /odometry/filtered  (ekf_local output)        — should track LIO closely
+# LIO covariance strategy (see lio_relay.py for full derivation):
+#   Local  channel: constant per-step noise (small — represents one scan step)
+#   Global channel: distance-proportional (grows with total path length)
 #
-#   Expected behavior:
-#     - XY trajectory of /odometry/filtered visually overlays /odometry/lio
-#     - Yaw should track within a few millirad
-#     - No divergence, no covariance explosion in /odometry/filtered.pose.covariance
+# What to watch in PlotJuggler:
+#   /odom vs /odometry/lio           — local: should overlay, covariance ~1–5 m²
+#   /odometry/filtered/global vs /odometry/gps  — global: GPS and LIO should agree
+#   /odom covariance[0]              — should grow slowly, not explode
 #
-#   If the filtered output drifts away from LIO:        Q (process noise) too high
-#   If the filtered output lags or stutters:            rejection thresholds too tight
-#                                                       or transform_timeout biting
-#   If the filtered output explodes:                    differential flag wrong,
-#                                                       or LIO frame_id mismatch
+#   If local covariance explodes:    Q_vyaw or Q_vroll/vpitch still too high
+#   If global LIO ignores GPS:       k_drift_pos too small (LIO overconfident)
+#   If global GPS ignores LIO:       k_drift_pos too large
+#   If local drifts away from LIO:   Q_xy too high, or cov_pos_local too large
 ###############################################################################
 
 # ─── LIO relay ──────────────────────────────────────────────────────────────
+# Local channel: constant per-step noise.
+#   cov_pos_local = 0.001 m²  →  σ = 31 mm per scan step.  MID360 in a farm
+#     field scan-matches to ~5–15 mm per 10 cm step; 31 mm is generous.
+#   cov_rot_local = 0.0001 rad²  →  σ = 0.01 rad (~0.6°) per step.  LIO yaw
+#     per-step error is typically <0.005 rad; 2× overhead is safe.
+# Global channel: distance-proportional (see lio_relay.py for derivation).
+#   k_drift_pos = 0.003  →  3 mm of position error per metre driven (0.3%).
+#     FAST-LIO2 on MID360 in a structured agricultural field achieves this.
+#     At 200 m total path: R_LIO = (0.003×200)² = 0.36 m².
+#     This is critical for GPS outage behaviour:
+#       GPS float/GNSS-only (R ≈ 10–80 m²): LIO is 30–220× more trusted
+#         → GPS float contributes <1% weight, cannot drag the global estimate.
+#       GPS RTK-fixed (R ≈ 4e-4 m²): GPS K ≈ 0.999, fully dominates.
+#         → GPS re-acquisition after outage snaps back immediately.
+#     Previous value 0.02 gave R_LIO=16 m² at 200 m, making GPS float only
+#     5× less trusted — enough for a 30 m float error to pull the filter 6 m.
+#   k_drift_rot = 0.0003 rad/m  →  ~1.7° per 100 m (conservative).
+#   cov_pos_floor = 0.01 m²  →  σ = 10 cm minimum; prevents LIO from being
+#     so confident at startup that the first GPS fix is rejected.
 lio_relay:
   ros__parameters:
-    cov_pos:   0.1
-    cov_rot:   0.05
-    cov_vel:   0.05
-    cov_omega: 0.01
+    cov_pos_local:  0.001
+    cov_rot_local:  0.0001
+    cov_vel:        0.01
+    cov_omega:      0.001
+    cov_pos_floor:  0.01
+    cov_rot_floor:  0.0001
+    k_drift_pos:    0.003
+    k_drift_rot:    0.0003
 
 # ─── Local EKF ──────────────────────────────────────────────────────────────
 # Single sensor, 2D mode. With differential: true, the EKF integrates LIO
@@ -70,8 +90,8 @@ ekf_local:
     odom0_nodelay: true
     odom0_differential: true              # FIXED: was false — main bug
     odom0_relative: false
-    odom0_pose_rejection_threshold: 2.0
-    odom0_twist_rejection_threshold: 0.2
+    odom0_pose_rejection_threshold: 9.0
+    odom0_twist_rejection_threshold: 9.0
 
     # ── Sensor 1: GPS — DISABLED for step 1 ─────────────────────────────────
     # Re-enable in step 2 once the LIO-only plumbing is verified.
@@ -97,44 +117,85 @@ ekf_local:
     odom1_nodelay: true
     odom1_differential: false
     odom1_relative: false
-    odom1_pose_rejection_threshold: 0.2
-    odom1_twist_rejection_threshold: 1.0
+    odom1_pose_rejection_threshold: 5.0   # never evaluated — odom1_config fuses only twist (vx,vy);
+                                           # pose threshold is only applied to fused pose components.
+                                           # set to 5.0 as an explicit don't-care value.
+    odom1_twist_rejection_threshold: 9.0  # GPS Doppler vx,vy.  Loose on purpose: after a canopy
+                                           # gap the LIO-only velocity estimate may drift 0.5-1 m/s
+                                           # from truth; 9σ allows GPS re-acquisition without
+                                           # rejecting the first good velocity on reacquisition.
 
-    # Process noise — template defaults. Don't tune these yet; first verify
-    # the LIO pass-through works. Tune Q in step 3 using NIS / innovation plots.
+    # ── Process noise (ekf_local) ────────────────────────────────────────────
+    # State: [x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az]
+    # 2D mode zeros z/roll/pitch and their derivatives in the measurement, but
+    # robot_localization still propagates variance in P during predict().  Leaving
+    # Q_vroll/vpitch/vyaw large therefore causes P to explode even in 2D mode.
+    #
+    # Q_x, Q_y = 1e-4:  position random walk in dead-reckoning.  At 50 Hz this
+    #   adds 1e-4 m² per step → 50×1e-4 = 5e-3 m²/s growth.  Over 360 s that
+    #   is 1.8 m² from Q_xy alone — honest for differential LIO over 6 minutes.
+    #   Previous 1e-3 added 18 m²; with the large Q_v entries that compounded.
+    # Q_yaw = 1e-3:  small yaw process noise.  Differential LIO provides a yaw
+    #   delta every 100 ms; between updates the heading uncertainty should grow
+    #   by √Q_yaw ≈ 0.032 rad per step — consistent with IMU integration noise.
+    # Q_vx, Q_vy = 0.1:  velocity random walk.  Large enough that the filter
+    #   can re-weight velocity after a momentary bad GPS Doppler reading during
+    #   GPS float/GNSS-only transitions.  With old Q_vx=0.01 the velocity state
+    #   was too stiff: a bad Doppler reading locked in wrong velocity, and LIO
+    #   differential corrections (effective R_vel≈0.1 m²/s²) were too weak to
+    #   overcome it → huge positional excursions during GPS outages.
+    # Q_vroll, Q_vpitch = 0.01:  unobserved in 2D mode, still predicted.
+    #   Must be small enough not to blow up P through kinematic coupling, but
+    #   large enough to keep these phantom states from going rigid.
+    # Q_vyaw = 0.05:  the critical value.
+    #   OLD 3.0 caused covariance explosion (σ = 1.73 rad/s per step).
+    #   NEW 0.001 was too small: heading-rate state became rigid; once GPS
+    #   Doppler locked in a wrong heading during outage, LIO corrections
+    #   (K≈0.2) couldn't override it fast enough → runaway divergence.
+    #   0.05 is 60× smaller than old (no explosion) and 50× larger than the
+    #   failed 0.001 (flexible enough to track through GPS outages).
+    # Q_ax, Q_ay = 0.01:  acceleration model error.  0.1 m/s² per step is fine.
     process_noise_covariance:
-      [1e-3,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
-       0.0,    1e-3,   0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
-       0.0,    0.0,    1e-2,   0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
-       0.0,    0.0,    0.0,    0.3,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
-       0.0,    0.0,    0.0,    0.0,    0.3,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
-       0.0,    0.0,    0.0,    0.0,    0.0,    1e-2,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
-       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1e-1,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
-       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     1e-1,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
-       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.5,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
-       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    3.0,    0.0,    0.0,    0.0,    0.0,    0.0,
-       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    3.0,    0.0,    0.0,    0.0,    0.0,
-       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    3.0,    0.0,    0.0,    0.0,
-       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    3.0,    0.0,    0.0,
-       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    3.0,    0.0,
-       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    3.0]
+      [1e-4,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    1e-4,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    1e-4,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    1e-3,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    1e-3,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    1e-3,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.1,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.1,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.05,   0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01]
 
+    # ── Initial estimate covariance (ekf_local) ──────────────────────────────
+    # x, y, yaw: 1e-9 — FAST-LIO2 starts at the origin by definition; the first
+    #   LIO differential step will be near-zero so we can start very confident.
+    # roll, pitch: 1.0 — 2D mode forces these to zero but initial uncertainty
+    #   is physically real; 1.0 rad² (±57°) is fine since 2D mode overrides.
+    # vx, vy: 0.1 — robot is approximately stationary at startup; σ = 0.32 m/s.
+    # vroll, vpitch, vyaw: 0.01 — small initial angular rate uncertainty.
+    # ax, ay: 0.1 — moderate acceleration uncertainty at startup.
     initial_estimate_covariance:
-      [1e-9,  0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
-       0.0,   1e-9,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
-       0.0,   0.0,    1e-9,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
-       0.0,   0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
-       0.0,   0.0,    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
-       0.0,   0.0,    0.0,    0.0,    0.0,    1e-9,   0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
-       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
-       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
-       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
-       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0,     0.0,     0.0,     0.0,    0.0,    0.0,
-       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     1.0,     0.0,     0.0,    0.0,    0.0,
-       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     1.0,     0.0,    0.0,    0.0,
-       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     1.0,    0.0,    0.0,
-       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    1.0,    0.0,
-       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    1.0]
+      [1e-9,  0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,   1e-9,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,   0.0,    1e-9,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    1e-9,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.1,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.1,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.1,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,    0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.1,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.1,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.1]
 
 # ─── Global EKF ─────────────────────────────────────────────────────────────
 # Publishes:  map → odom  (TF) + /odometry/filtered/global
@@ -186,8 +247,8 @@ ekf_global:
     odom0_nodelay: true
     odom0_differential: false            # absolute — frame_id=map, no TF lookup needed
     odom0_relative: false
-    odom0_pose_rejection_threshold: 4.0
-    odom0_twist_rejection_threshold: 4.0
+    odom0_pose_rejection_threshold: 9.0
+    odom0_twist_rejection_threshold: 9.0
 
     # ── Sensor 1: GPS absolute position (frame_id: map) ──────────────────────
     # gps_relay overrides frame_id to 'map' on this topic.  That avoids the
@@ -207,7 +268,15 @@ ekf_global:
     odom1_nodelay: true
     odom1_differential: false           # absolute — frame_id=map avoids circular TF
     odom1_relative: false
-    odom1_pose_rejection_threshold: 4.0
+    odom1_pose_rejection_threshold: 10.0  # Mahalanobis GPS outlier gate.
+                                           # At RTK-fixed convergence: P_xx≈4e-4, R_GPS≈4e-4,
+                                           # S≈8e-4, σ_S≈0.028 m → threshold = 0.28 m max outlier.
+                                           # ZED-F9P RTK fixed spec: 0.01 m — so 0.28 m is a
+                                           # genuine anomaly and correct to reject.
+                                           # GPS float/GNSS-only: R grows to 1-25 m², S grows
+                                           # proportionally, so legitimate fixes still accepted.
+                                           # Previous value 100.0 accepted 2.8 m multipath glitches
+                                           # at convergence, silently corrupting stored waypoints.
 
     # ── Sensor 2: GPS Doppler velocity — not present in _odometry bag ────────
     # Re-enable when running against a bag that contains /ublox_gps_node/fix_velocity.
@@ -225,24 +294,27 @@ ekf_global:
     #odom2_pose_rejection_threshold: 0.2
     #odom2_twist_rejection_threshold: 1.0
 
-    # Process noise — template defaults. Don't tune these yet; first verify
-    # the LIO pass-through works. Tune Q in step 3 using NIS / innovation plots.
+    # ── Process noise (ekf_global) ────────────────────────────────────────────
+    # Same values as ekf_local — see ekf_local comment block for full rationale.
+    # Both EKFs share the same velocity flexibility trade-off: Q_vx/vy=0.1 and
+    # Q_vyaw=0.05 give enough state flexibility to absorb GPS transients without
+    # the covariance explosion that Q_vyaw=3.0 caused.
     process_noise_covariance:
-      [1e-3,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
-       0.0,    1e-3,   0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
-       0.0,    0.0,    1e-2,   0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
-       0.0,    0.0,    0.0,    0.3,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
-       0.0,    0.0,    0.0,    0.0,    0.3,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
-       0.0,    0.0,    0.0,    0.0,    0.0,    1e-2,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
-       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1e-1,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
-       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     1e-1,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
-       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.5,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
-       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    3.0,    0.0,    0.0,    0.0,    0.0,    0.0,
-       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    3.0,    0.0,    0.0,    0.0,    0.0,
-       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.05,    0.0,    0.0,    0.0,
-       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    1e-2,    0.0,    0.0,
-       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    1e-2,    0.0,
-       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1e-2]
+      [1e-4,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    1e-4,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    1e-4,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    1e-3,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    1e-3,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    1e-3,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.1,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.1,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.05,   0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01]
 
     initial_estimate_covariance:
       # xy set to 1.0 (not 1e6) — with LIO/global as absolute anchor the filter

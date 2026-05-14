@@ -28,34 +28,63 @@ Transform used per message
 
 Both static transforms are looked up once via tf2_ros after node startup.
 
-Covariance strategy (current: constant)
-----------------------------------------
+Covariance strategy
+-------------------
 FAST-LIO2's internal covariance is the propagated linearization uncertainty
 of its tightly-coupled filter.  It is systematically overconfident: it does
 not account for map-model error, scan degeneracy, or IMU bias drift, and can
 be 10–100× smaller than the true error in open or featureless environments.
 
-Current approach: constant diagonal covariance set via ROS parameters.
-  - The local EKF uses LIO in differential mode (odom0_differential: true), so
-    only the *step* uncertainty matters, not absolute position — the constant is
-    a reasonable proxy for per-step noise.
-  - The global EKF uses absolute mode, so the constant also determines how much
-    GPS has to fight LIO to anchor the map frame.  Tune upward if GPS is slow
-    to pull the estimate.
+Two different strategies are used for the two output channels:
 
-Planned upgrade (implement when constant proves insufficient):
-  - Subscribe to /cloud_registered_body, compute eigen-decomposition of the 3D
-    point covariance matrix.  When the minimum eigenvalue is near zero (flat
-    ground plane, open field), inflate the horizontal-translation and yaw
-    covariance entries.  This is a lightweight degeneracy proxy (~30 lines)
-    that does not require FAST-LIO2 internals.
+Local channel (/odometry/lio, differential mode):
+  The EKF only sees pose *deltas*, not absolute position.  The covariance
+  therefore represents per-step uncertainty — how accurately did FAST-LIO2
+  estimate the motion between consecutive scans?  For a MID360 in structured
+  terrain this is typically 1–3 mm per 10 cm step and ~0.01 rad per 10 cm.
+  A small constant is the right model here: it is approximately stationary
+  (each step has similar quality) and it must be small enough that the EKF
+  actually uses the LIO increments rather than ignoring them in favour of Q.
+  Parameters: cov_pos_local, cov_rot_local, cov_vel, cov_omega.
+
+Global channel (/odometry/lio/global, absolute mode):
+  The EKF fuses the full absolute pose in the map frame.  Covariance now
+  represents cumulative scan-matching error since startup — how far could the
+  LIO map have drifted from truth?  This grows with distance travelled because:
+    - Each scan-match has a small relative error ε ∝ step_size
+    - Errors accumulate (roughly) as a random walk: σ_pos ≈ k_drift · √distance
+    - More conservatively, in open/featureless terrain: σ_pos ≈ k_drift · distance
+  We use the linear (worst-case) model with a minimum floor so GPS is never
+  completely frozen out by an overconfident LIO at startup:
+    cov_pos_global = max(cov_pos_floor², (k_drift_pos · total_distance)²)
+    cov_rot_global = max(cov_rot_floor², (k_drift_rot · total_distance)²)
+  Typical values (MID360, agricultural field):
+    k_drift_pos = 0.02  →  2 cm per metre driven  (conservative for open field)
+    k_drift_rot = 0.0003 rad/m  →  ~1.7° per 100 m
+  These give Kalman gains that let GPS override LIO once the robot has driven
+  a few metres away from the start, while LIO dominates for the first few
+  metres when GPS may not yet have RTK lock.
+  Parameters: cov_pos_floor, cov_rot_floor, k_drift_pos, k_drift_rot.
+
+Planned upgrade (degeneracy-aware scaling):
+  Subscribe to /cloud_registered_body, compute eigen-decomposition of the 3D
+  point covariance matrix.  The ratio λ_min/λ_max is a degeneracy proxy:
+  near 0 → flat/featureless (inflate xy and yaw), near 1 → rich geometry.
+  Can replace or multiply k_drift for a physics-aware per-scan weight.
 
 Parameters
 ----------
-  cov_pos   (float, default 0.1):  Diagonal variance for x, y, z position [m²]
-  cov_rot   (float, default 0.05): Diagonal variance for roll, pitch, yaw [rad²]
-  cov_vel   (float, default 0.05): Diagonal variance for linear velocity [m²/s²]
-  cov_omega (float, default 0.01): Diagonal variance for angular velocity [rad²/s²]
+  # Local channel (constant per-step noise):
+  cov_pos_local  (float, default 0.001):  Diagonal position variance [m²]
+  cov_rot_local  (float, default 0.0001): Diagonal rotation variance [rad²]
+  cov_vel        (float, default 0.01):   Diagonal linear velocity variance [(m/s)²]
+  cov_omega      (float, default 0.001):  Diagonal angular velocity variance [(rad/s)²]
+
+  # Global channel (distance-proportional, with floor):
+  cov_pos_floor  (float, default 0.01):   Minimum position variance [m²] (= floor of 0.1 m σ)
+  cov_rot_floor  (float, default 0.0001): Minimum rotation variance [rad²] (= floor of 0.01 rad σ)
+  k_drift_pos    (float, default 0.02):   Position drift rate [m error / m travelled]
+  k_drift_rot    (float, default 0.0003): Rotation drift rate [rad / m travelled]
 
 Prerequisites
 -------------
@@ -133,23 +162,43 @@ class LioRelay(Node):
     def __init__(self):
         super().__init__('lio_relay')
 
-        # ── Covariance parameters ─────────────────────────────────────────────
-        self.declare_parameter('cov_pos',   0.1)
-        self.declare_parameter('cov_rot',   0.05)
-        self.declare_parameter('cov_vel',   0.05)
-        self.declare_parameter('cov_omega', 0.01)
+        # ── Covariance parameters — local channel (constant per-step) ─────────
+        self.declare_parameter('cov_pos_local',  0.001)
+        self.declare_parameter('cov_rot_local',  0.0001)
+        self.declare_parameter('cov_vel',        0.01)
+        self.declare_parameter('cov_omega',      0.001)
 
-        cp  = self.get_parameter('cov_pos').value
-        cr  = self.get_parameter('cov_rot').value
-        cv  = self.get_parameter('cov_vel').value
-        co  = self.get_parameter('cov_omega').value
+        # ── Covariance parameters — global channel (distance-proportional) ────
+        self.declare_parameter('cov_pos_floor',  0.01)    # 0.1 m σ floor
+        self.declare_parameter('cov_rot_floor',  0.0001)  # 0.01 rad σ floor
+        self.declare_parameter('k_drift_pos',    0.02)    # m error / m travelled
+        self.declare_parameter('k_drift_rot',    0.0003)  # rad / m travelled
 
-        self._pose_cov  = _build_diag_cov36([cp, cp, cp, cr, cr, cr])
-        self._twist_cov = _build_diag_cov36([cv, cv, cv, co, co, co])
+        cp_l = self.get_parameter('cov_pos_local').value
+        cr_l = self.get_parameter('cov_rot_local').value
+        cv   = self.get_parameter('cov_vel').value
+        co   = self.get_parameter('cov_omega').value
+
+        self._cov_pos_floor = self.get_parameter('cov_pos_floor').value
+        self._cov_rot_floor = self.get_parameter('cov_rot_floor').value
+        self._k_drift_pos   = self.get_parameter('k_drift_pos').value
+        self._k_drift_rot   = self.get_parameter('k_drift_rot').value
+
+        # Local channel: fixed covariance (per-step noise)
+        self._local_pose_cov  = _build_diag_cov36([cp_l, cp_l, cp_l, cr_l, cr_l, cr_l])
+        self._twist_cov       = _build_diag_cov36([cv,   cv,   cv,   co,   co,   co  ])
 
         self.get_logger().info(
-            f'lio_relay: cov_pos={cp}, cov_rot={cr}, '
+            f'lio_relay local:  cov_pos={cp_l}, cov_rot={cr_l}, '
             f'cov_vel={cv}, cov_omega={co}')
+        self.get_logger().info(
+            f'lio_relay global: floor_pos={self._cov_pos_floor}, '
+            f'floor_rot={self._cov_rot_floor}, '
+            f'k_drift_pos={self._k_drift_pos}, k_drift_rot={self._k_drift_rot}')
+
+        # ── Distance accumulator for global channel ───────────────────────────
+        self._total_distance: float = 0.0
+        self._last_t_ob: np.ndarray | None = None  # previous base_link position
 
         # ── TF ────────────────────────────────────────────────────────────────
         self._tf_buffer   = tf2_ros.Buffer()
@@ -188,7 +237,8 @@ class LioRelay(Node):
     def _make_odometry(self, stamp, frame_id: str,
                        t_ob: np.ndarray, q_ob: np.ndarray,
                        vx: float, vy: float, vz: float,
-                       wx: float, wy: float, wz: float) -> Odometry:
+                       wx: float, wy: float, wz: float,
+                       pose_cov: list[float]) -> Odometry:
         out = Odometry()
         out.header.stamp    = stamp
         out.header.frame_id = frame_id
@@ -201,7 +251,7 @@ class LioRelay(Node):
         out.pose.pose.orientation.y = float(q_ob[1])
         out.pose.pose.orientation.z = float(q_ob[2])
         out.pose.pose.orientation.w = float(q_ob[3])
-        out.pose.covariance = list(self._pose_cov)
+        out.pose.covariance = list(pose_cov)
 
         out.twist.twist.linear.x  = float(vx)
         out.twist.twist.linear.y  = float(vy)
@@ -212,6 +262,21 @@ class LioRelay(Node):
         out.twist.covariance = list(self._twist_cov)
 
         return out
+
+    def _global_pose_cov(self) -> list[float]:
+        """Build a distance-scaled pose covariance for the global channel.
+
+        Position variance:  max(floor², (k_drift_pos · d)²)
+        Rotation variance:  max(floor², (k_drift_rot · d)²)
+
+        The linear-in-distance model is conservative (worst-case open field).
+        It ensures GPS can always override LIO once a few metres are travelled,
+        while LIO dominates at startup when scan-matching is most accurate.
+        """
+        d = self._total_distance
+        cp = max(self._cov_pos_floor, (self._k_drift_pos * d) ** 2)
+        cr = max(self._cov_rot_floor, (self._k_drift_rot * d) ** 2)
+        return _build_diag_cov36([cp, cp, cp, cr, cr, cr])
 
     # ── Subscription callback ─────────────────────────────────────────────────
 
@@ -235,6 +300,12 @@ class LioRelay(Node):
         t_tmp, q_tmp = _compose(t_oc, q_oc, t_cb, q_cb)
         t_ob,  q_ob  = _compose(t_tmp, q_tmp, t_bb, q_bb)
 
+        # Accumulate distance for global covariance scaling.
+        if self._last_t_ob is not None:
+            step = float(np.linalg.norm(t_ob - self._last_t_ob))
+            self._total_distance += step
+        self._last_t_ob = t_ob.copy()
+
         # Rotate twist from body frame into base_link frame.
         # Lever-arm velocity correction is second-order for a near-CoG mounting
         # and is omitted; add if the IMU is far from base_link.
@@ -247,17 +318,19 @@ class LioRelay(Node):
 
         stamp = msg.header.stamp
 
-        # Local EKF stream: frame_id=odom (used with odom0_differential: true)
+        # Local EKF stream: constant per-step covariance (frame_id=odom, differential)
         self._pub_local.publish(
             self._make_odometry(stamp, 'odom', t_ob, q_ob,
                                 lv[0], lv[1], lv[2],
-                                av[0], av[1], av[2]))
+                                av[0], av[1], av[2],
+                                self._local_pose_cov))
 
-        # Global EKF stream: frame_id=map (absolute pose; at startup map==odom)
+        # Global EKF stream: distance-proportional covariance (frame_id=map, absolute)
         self._pub_global.publish(
             self._make_odometry(stamp, 'map', t_ob, q_ob,
                                 lv[0], lv[1], lv[2],
-                                av[0], av[1], av[2]))
+                                av[0], av[1], av[2],
+                                self._global_pose_cov()))
 
 
 def main(args=None):
