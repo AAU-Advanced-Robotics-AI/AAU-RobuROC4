@@ -50,11 +50,14 @@ from launch_ros.actions import Node
 # ── Launch setup (runs at launch time, after arguments are resolved) ──────────
 
 def launch_setup(context, *args, **kwargs):
-    sensor_config  = LaunchConfiguration('sensor_config').perform(context)
-    use_sim_time   = LaunchConfiguration('use_sim_time').perform(context)
-    enable_sensors = LaunchConfiguration('enable_sensors').perform(context).lower()
-    max_speed      = LaunchConfiguration('max_speed').perform(context)
-    turbo_speed    = LaunchConfiguration('turbo_speed').perform(context)
+    sensor_config        = LaunchConfiguration('sensor_config').perform(context)
+    use_sim_time         = LaunchConfiguration('use_sim_time').perform(context)
+    enable_sensors       = LaunchConfiguration('enable_sensors').perform(context).lower()
+    enable_joy           = LaunchConfiguration('enable_joy').perform(context).lower()
+    max_speed            = LaunchConfiguration('max_speed').perform(context)
+    turbo_speed          = LaunchConfiguration('turbo_speed').perform(context)
+    navigation_mode      = LaunchConfiguration('navigation_mode').perform(context).lower()
+    joy_management_topic = LaunchConfiguration('joy_management_topic').perform(context)
 
     pkg_description = get_package_share_directory('roburoc_description')
     pkg_bringup     = get_package_share_directory('roburoc_bringup')
@@ -102,18 +105,24 @@ def launch_setup(context, *args, **kwargs):
             name='ROC_CTRL',
             output='screen',
             parameters=[{
-                'max_speed':   float(max_speed),
-                'turbo_speed': float(turbo_speed),
+                'max_speed':            float(max_speed),
+                'turbo_speed':          float(turbo_speed),
+                'navigation_mode':      navigation_mode == 'true',
+                'joy_management_topic': joy_management_topic,
             }],
         ),
 
         # Joy node — gamepad / joystick input
-        Node(
+        # Set enable_joy:=false when using the botany navigation stack, which
+        # manages joystick input through its own joy_relay → control_mux pipeline.
+        # (If joy_node runs with ROC_CTRL active, joystick "no-button" messages
+        # continuously send zero velocity, blocking autonomous navigation.)
+        *([Node(
             package='joy',
             executable='joy_node',
             name='ROC_PAD',
             output='screen',
-        ),
+        )] if enable_joy == 'true' else []),
 
     ]
 
@@ -166,9 +175,33 @@ def generate_launch_description():
             description='Normal operating speed limit [m/s].',
         ),
         DeclareLaunchArgument(
+            'navigation_mode',
+            default_value='false',
+            description=(
+                'When true, ROC_CTRL handles only motor management (■ brake/enable, '
+                '⬤ recover) from joy_management_topic. Movement commands come via '
+                '/roburoc/cmd_vel from the navigation stack (joy_relay → control_mux). '
+                'Set automatically to true by robot_real.launch.py.'
+            ),
+        ),
+        DeclareLaunchArgument(
+            'joy_management_topic',
+            default_value='/joy_physical',
+            description='Joy topic to watch for motor management buttons when navigation_mode=true.',
+        ),
+        DeclareLaunchArgument(
             'turbo_speed',
             default_value='2.0',
             description='Turbo mode speed limit [m/s] (activated by R2 trigger, max ~2.75 m/s).',
+        ),
+        DeclareLaunchArgument(
+            'enable_joy',
+            default_value='true',
+            description=(
+                'Start joy_node for direct joystick → ROC_CTRL control. '
+                'Set false when using botany_ws navigation (joy is handled '
+                'by joy_relay → control_mux in that stack instead).'
+            ),
         ),
 
         OpaqueFunction(function=launch_setup),

@@ -43,6 +43,12 @@ Parameters
   speed_threshold   (float, default 0.3):  Min GPS speed (m/s) to start bearing estimation.
   bearing_samples   (int,   default 5):    Number of velocity samples to average.
   bearing_timeout   (float, default 15.0): Wall seconds to wait before falling back to ENU.
+  datum_lat         (float, default nan):  Fixed datum latitude  (degrees).  When set together
+                                           with datum_lon, the node skips auto-detect and uses
+                                           this as the map-frame GPS origin every session.
+                                           Use this for cross-session route repeatability.
+                                           Leave as nan (default) for same-session operation.
+  datum_lon         (float, default nan):  Fixed datum longitude (degrees).  See datum_lat.
   lever_arm_x       (float, default -0.428): GPS antenna X in base_link frame (from URDF).
   lever_arm_y       (float, default  0.295): GPS antenna Y in base_link frame (from URDF).
   odom_topic        (str,   default '/odometry/lio'): Odometry topic to read robot yaw from.
@@ -80,6 +86,18 @@ class GpsToEnu(Node):
         self.declare_parameter('bearing_samples', 5)
         self.declare_parameter('bearing_timeout', 15.0)
         self.declare_parameter('vel_max_age', 0.05)  # seconds; drop cached velocity if older
+        # Fixed datum for cross-session route repeatability.
+        # When both are provided (not nan), the node uses them as the map-frame
+        # GPS origin instead of auto-detecting from the first fix.
+        self.declare_parameter('datum_lat', float('nan'))
+        self.declare_parameter('datum_lon', float('nan'))
+        # Maximum east-variance (m²) allowed before the datum is accepted.
+        # position_covariance[0] = east variance (m²); sqrt gives std dev.
+        # ZED-F9P RTK fixed: ~0.0001–0.001 m² (1–3 cm std dev).
+        # GNSS-single / float: ~1–25 m² → cleanly rejected.
+        # Default 0.01 m² = 10 cm threshold: passes RTK fixed, blocks everything else.
+        # Override: datum_cov_max:=1.0 to accept GNSS-single outdoors without base.
+        self.declare_parameter('datum_cov_max', 0.01)
         # Lever arm: GPS antenna position expressed in base_link frame (from URDF).
         # Update these if the antenna is remounted.
         self.declare_parameter('lever_arm_x', -0.428)  # metres forward of base_link
@@ -93,18 +111,35 @@ class GpsToEnu(Node):
         self._lx         = self.get_parameter('lever_arm_x').value
         self._ly         = self.get_parameter('lever_arm_y').value
         odom_topic       = self.get_parameter('odom_topic').value
+        self._datum_cov_max = self.get_parameter('datum_cov_max').value
+
+        _datum_lat = self.get_parameter('datum_lat').value
+        _datum_lon = self.get_parameter('datum_lon').value
 
         # ── State ─────────────────────────────────────────────────────────────
-        self._lat0: float | None = None   # geodetic datum
-        self._lon0: float | None = None
+        # Pre-seed datum from parameters when both are provided.
+        # This pins the map frame to a fixed GPS coordinate across sessions.
+        if not (math.isnan(_datum_lat) or math.isnan(_datum_lon)):
+            self._lat0 = _datum_lat
+            self._lon0 = _datum_lon
+            self._datum_wall_sec = self.get_clock().now().nanoseconds * 1e-9
+            self.get_logger().info(
+                f'gps_to_enu: FIXED datum loaded from parameters — '
+                f'lat={_datum_lat:.6f}°, lon={_datum_lon:.6f}°. '
+                f'Map frame is GPS-anchored for cross-session route repeatability.'
+            )
+        else:
+            self._lat0 = None   # will be set from first GPS fix
+            self._lon0 = None
+            self._datum_wall_sec = None
+            self.get_logger().info(
+                'gps_to_enu: no fixed datum — origin will be set from first GPS fix.'
+            )
 
         # Bearing alignment (radians, compass: 0=North, +π/2=East)
         self._bearing: float | None = None
         self._bearing_buf: list[float] = []
         self._fallen_back = False
-
-        # Wall-clock time at which datum was first set (for timeout)
-        self._datum_wall_sec: float | None = None
 
         # Current robot yaw in odom frame, updated from odom_topic (/odometry/lio).
         # Defaults to 0.0 (used before the first message arrives).
@@ -191,13 +226,27 @@ class GpsToEnu(Node):
 
         lat, lon = msg.latitude, msg.longitude
 
-        # Set datum on first valid fix
+        # Set datum on first valid fix (only when no fixed datum was pre-loaded)
         if self._lat0 is None:
+            # Gate on position covariance — block bad indoor/float fixes.
+            # position_covariance_type: 0=unknown, 1=approx, 2=diagonal_known, 3=full.
+            cov_type = msg.position_covariance_type
+            cov_east = msg.position_covariance[0]   # east variance (m²)
+            if cov_type == 0 or cov_east > self._datum_cov_max:
+                east_std = math.sqrt(max(cov_east, 0.0))
+                thr_std  = math.sqrt(self._datum_cov_max)
+                self.get_logger().warn(
+                    f'gps_to_enu: datum NOT set — GPS too imprecise '
+                    f'(cov_type={cov_type}, east_std={east_std:.2f} m '
+                    f'vs threshold {thr_std:.2f} m). '
+                    f'Wait for RTK fixed (carr_soln=2).'
+                )
+                return
             self._lat0 = lat
             self._lon0 = lon
             self._datum_wall_sec = self.get_clock().now().nanoseconds * 1e-9
             self.get_logger().info(
-                f'gps_to_enu: datum set → lat={lat:.6f}°, lon={lon:.6f}°'
+                f'gps_to_enu: datum auto-set from first GPS fix → lat={lat:.6f}°, lon={lon:.6f}°'
             )
             return                             # skip origin itself (0,0)
 

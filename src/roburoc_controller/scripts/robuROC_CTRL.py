@@ -57,6 +57,18 @@ class RobuROC_CTRL(Node):
         self.TURBO_SPEED = self.get_parameter('turbo_speed').get_parameter_value().double_value
         self.logger.info(f'Speed limits — normal: {self.MAX_SPEED} m/s, turbo: {self.TURBO_SPEED} m/s')
 
+        # navigation_mode: when True, movement comes via /roburoc/cmd_vel from the
+        # navigation stack (joy_relay → control_mux).  The joy subscription is
+        # replaced by a management-only callback that handles only:
+        #   ■ (square, buttons[1]) — brake + re-enable drives (press at startup)
+        #   ⬤ (circle, buttons[3]) — recover from error / E-stop
+        # This prevents the "no buttons held = stop" Joy logic from overriding
+        # autonomous navigation commands.
+        self.declare_parameter('navigation_mode',      False)
+        self.declare_parameter('joy_management_topic', '/joy_physical')
+        navigation_mode      = self.get_parameter('navigation_mode').get_parameter_value().bool_value
+        joy_management_topic = self.get_parameter('joy_management_topic').get_parameter_value().string_value
+
         # Setup canopen help modules
         self._CTW = CTW()
         self._COBID = COBID()
@@ -77,7 +89,19 @@ class RobuROC_CTRL(Node):
 
         # Set up subscriptions
         self.SubscriptionSub = self.create_subscription(CANSubscription, '/roburoc/CANSubscription', self.Subscription_CB, 10)
-        self.VelSubJoy = self.create_subscription(Joy, '/joy', self.setSpeed, 10)
+        if navigation_mode:
+            self.logger.info(
+                f'Navigation mode: joy management via {joy_management_topic} '
+                f'(■=brake/enable, ⬤=recover). Movement via /roburoc/cmd_vel.'
+            )
+            self.create_subscription(Joy, joy_management_topic, self._management_buttons_cb, 10)
+            # Safety watchdog: zero wheels if no /roburoc/cmd_vel arrives within timeout.
+            self.declare_parameter('cmd_vel_timeout', 0.5)
+            self._cmd_vel_timeout = self.get_parameter('cmd_vel_timeout').get_parameter_value().double_value
+            self._last_cmd_vel_time: float = 0.0
+            self.create_timer(0.1, self._cmd_vel_watchdog)
+        else:
+            self.VelSubJoy = self.create_subscription(Joy, '/joy', self.setSpeed, 10)
         self.VelSubCmd = self.create_subscription(Twist, '/roburoc/cmd_vel', self.setSpeed, 10)
 
         # Set up interface variables
@@ -166,6 +190,7 @@ class RobuROC_CTRL(Node):
             if type(message) == type(Joy()) and any(message.buttons):
                 self.gamepad_control(message)
             elif type(message) == type(Twist()):
+                self._last_cmd_vel_time = time.time()
                 self.navigation_control(message)
             elif type(message) == type(Joy()) and not any(message.buttons):
                 time.sleep(0.01) # Ensures that the CANBus is not overloaded
@@ -181,6 +206,43 @@ class RobuROC_CTRL(Node):
                 self.SDO_Write(3, [0x60FF, 0x00], [0x00])
         except Exception as e:
             self.logger.error(f"Unknown message format; error {e}")
+
+    def _cmd_vel_watchdog(self):
+        """Zero all wheels when no /roburoc/cmd_vel has arrived within cmd_vel_timeout."""
+        if self._last_cmd_vel_time == 0.0:
+            return  # never received any command yet; don't interfere
+        if time.time() - self._last_cmd_vel_time > self._cmd_vel_timeout:
+            self.SDO_Write(0, [0x60FF, 0x00], [0x00])
+            self.SDO_Write(1, [0x60FF, 0x00], [0x00])
+            self.SDO_Write(2, [0x60FF, 0x00], [0x00])
+            self.SDO_Write(3, [0x60FF, 0x00], [0x00])
+            self._last_cmd_vel_time = 0.0  # reset so we only zero once per gap
+
+    def _management_buttons_cb(self, message):
+        """
+        Navigation-mode joy callback — handles ONLY motor management buttons.
+
+        Used when navigation_mode=True. Movement comes via /roburoc/cmd_vel from the
+        navigation stack; this callback only reacts to button presses and ignores
+        all axes and the "no buttons" state (so autonomous motion is never interrupted).
+
+          ■  (square,  buttons[1]) — stop wheels + brake + re-enable drives.
+                                     Press once at startup to put drives in ready state.
+          ⬤  (circle,  buttons[3]) — NMT reset + re-enable (recover from error/E-stop).
+        """
+        try:
+            if len(message.buttons) > 1 and message.buttons[1] == 1:   # ■ square
+                self.SDO_Write(0, [0x60FF, 0x00], [0x00])
+                self.SDO_Write(1, [0x60FF, 0x00], [0x00])
+                self.SDO_Write(2, [0x60FF, 0x00], [0x00])
+                self.SDO_Write(3, [0x60FF, 0x00], [0x00])
+                self.brake()
+                self.logger.info('■ Square pressed: brake + re-enable drives')
+            elif len(message.buttons) > 3 and message.buttons[3] == 1:  # ⬤ circle
+                self.recover()
+                self.logger.info('⬤ Circle pressed: recover from error')
+        except Exception as e:
+            self.logger.error(f'_management_buttons_cb error: {e}')
 
     def gamepad_control(self, message):
         """
@@ -237,28 +299,38 @@ class RobuROC_CTRL(Node):
 
     def navigation_control(self, message):
         """
-        Navigation control method, utilising the internal linear and angular velocity commands embedded in most
-        algorithms and packages in ROS2.
+        Navigation control method for ROS2 Twist messages (linear.x m/s, angular.z rad/s).
 
-        TODO: Test (Not done)
-        :param message:
-        :return:
+        Uses the same skid-steer differential-drive kinematics as gamepad_control:
+            v_left  = linear.x - angular.z * (W/2)    W/2 = 0.25 m (track width ~0.5 m)
+            v_right = linear.x + angular.z * (W/2)
+
+        Motor direction convention (matches gamepad_control):
+            Wheel 0 (FL) / Wheel 3 (RL): left side  — positive = forward
+            Wheel 1 (FR) / Wheel 2 (RR): right side — motor runs in reverse convention,
+                                          so the right value is negated before conversion.
+
+        :param message: geometry_msgs/Twist
+        :return: None
         """
-        if message.angular.z < 0.4:
-            left = round(message.linear.x + message.angular.z / 4, 4) * 2
-            right = round(message.linear.x - message.angular.z / 4, 4) * 2
-        else:
-            turn_magnitude = round(message.angular.z / 2, 4)
-            left = turn_magnitude
-            right = -turn_magnitude
-        vel_MPS = int(left * (self._SCALE_VELOCITY / self._SCALE_RPM_TO_MPS))
-        vel2_MPS = int(-right * (self._SCALE_VELOCITY / self._SCALE_RPM_TO_MPS))
-        vel_MPS = list(bytearray(vel_MPS.to_bytes(4, byteorder='little', signed=True)))
+        linear  = message.linear.x
+        angular = message.angular.z
+
+        # Differential skid-steer mixing (identical sign convention to gamepad_control)
+        left  = round(linear - angular / 4, 4)
+        right = -round(linear + angular / 4, 4)   # negated: right motors run in reverse
+
+        scale    = self._SCALE_VELOCITY / self._SCALE_RPM_TO_MPS
+        vel_MPS  = int(left  * scale)
+        vel2_MPS = int(right * scale)              # right already negated above
+
+        vel_MPS  = list(bytearray(vel_MPS.to_bytes(4, byteorder='little', signed=True)))
         vel2_MPS = list(bytearray(vel2_MPS.to_bytes(4, byteorder='little', signed=True)))
-        self.SDO_Write(0, [0x60FF, 0x00], vel_MPS)
-        self.SDO_Write(1, [0x60FF, 0x00], vel2_MPS)
-        self.SDO_Write(2, [0x60FF, 0x00], vel2_MPS)
-        self.SDO_Write(3, [0x60FF, 0x00], vel_MPS)
+
+        self.SDO_Write(0, [0x60FF, 0x00], vel_MPS)   # FL left
+        self.SDO_Write(1, [0x60FF, 0x00], vel2_MPS)  # FR right
+        self.SDO_Write(2, [0x60FF, 0x00], vel2_MPS)  # RR right
+        self.SDO_Write(3, [0x60FF, 0x00], vel_MPS)   # RL left
 
 
     def brake(self):
