@@ -12,10 +12,9 @@ from rclpy.node import Node
 from sensor_msgs.msg import Joy
 from time import sleep
 
-logging.basicConfig(level=logging.DEBUG,
+logging.basicConfig(level=logging.WARNING,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                    handlers=[logging.FileHandler("CAN_Logs"),
-                              logging.StreamHandler()])
+                    handlers=[logging.FileHandler("CAN_Logs")])
 
 class RobuROC_CTRL(Node):
     """
@@ -120,7 +119,7 @@ class RobuROC_CTRL(Node):
             rclpy.spin_until_future_complete(self, response)
             self._CONNECTED = response.result().success
             self._CAN_NODES.extend(response.result().node_list)
-            self.logger.info(f"Connected to nodes: {self._CAN_NODES}")
+        self.logger.info(f"Connected to nodes: {self._CAN_NODES}")
         if self._CONNECTED == True:
             self.NMT_Write([self._CTW.RESET])
             self.NMT_Write([self._CTW.ENABLE_OP])
@@ -514,7 +513,7 @@ class RobuROC_CTRL(Node):
             handled = True
 
         if not handled:
-            self.logger.warning(f"COBID {message.cobid} not recognised")
+            self.logger.debug(f"COBID {message.cobid} not recognised")
 def main():
     rclpy.init()
     ctrl = RobuROC_CTRL()

@@ -118,16 +118,16 @@ ekf_local:
     # # Covariance pre-multiplied by gps_covariance_adapter (default scale=2).
     # # Only horizontal (x, y) — GPS altitude is noisier than LIO.
     odom1: /odometry/gps/local
-    odom1_config: [true,  true,  false,   # x, y  (horizontal only)
+    odom1_config: [false, false, false,
                    false, false, false,
-                   false, false, false,
+                   true,  true,  false,   # vx, vy (body-frame GPS velocity from gps_relay)
                    false, false, false,
                    false, false, false]
     odom1_queue_size: 10
     odom1_nodelay: true
-    odom1_differential: true             # differential: GPS has no authoritative odom-abs pose
+    odom1_differential: false            # velocity is absolute — never differential
     odom1_relative: false
-    odom1_pose_rejection_threshold: 4.0   # Mahalanobis: rejects multipath outliers
+    odom1_twist_rejection_threshold: 9.0  # loose: allows re-acquisition after GPS outages
 
     # Process noise — per official template defaults (ekf.yaml).
     # Tune in the field: increase diagonal for a variable if it is slow to
@@ -187,7 +187,7 @@ ekf_global:
     transform_timeout: 0.0
     print_diagnostics: true
     debug: false
-    publish_tf: true
+    publish_tf: true          # ekf_global owns the map→odom TF (not rtk_odom/lio_to_enu)
     publish_acceleration: false
     predict_to_current_time: true  # propagate state to wall-clock time between 10 Hz FAST_LIO messages → true 50 Hz output
 

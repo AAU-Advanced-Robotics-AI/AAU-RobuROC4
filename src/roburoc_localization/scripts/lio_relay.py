@@ -97,6 +97,7 @@ import numpy as np
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import QoSDurabilityPolicy, QoSProfile
 import tf2_ros
 
 from nav_msgs.msg import Odometry
@@ -196,9 +197,13 @@ class LioRelay(Node):
             f'floor_rot={self._cov_rot_floor}, '
             f'k_drift_pos={self._k_drift_pos}, k_drift_rot={self._k_drift_rot}')
 
-        # ── Distance accumulator for global channel ───────────────────────────
-        self._total_distance: float = 0.0
-        self._last_t_ob: np.ndarray | None = None  # previous base_link position
+        # ── Kabsch transform from /localization/lio_to_enu ────────────────────
+        self._kabsch_odom: Odometry | None = None   # latest Kabsch Odometry msg
+        self._cov_kabsch_pos: float = 0.0
+        self._cov_kabsch_rot: float = 0.0
+        # Distance since last Kabsch update (odom frame) for covariance growth
+        self._d_since_kabsch: float = 0.0
+        self._last_t_ob: np.ndarray | None = None  # previous base_link position (odom)
 
         # ── TF ────────────────────────────────────────────────────────────────
         self._tf_buffer   = tf2_ros.Buffer()
@@ -209,8 +214,13 @@ class LioRelay(Node):
         self._T_body_baselink:   tuple | None = None
 
         # ── I/O ───────────────────────────────────────────────────────────────
+        latch_qos = QoSProfile(
+            depth=1, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
+
         self._sub = self.create_subscription(
             Odometry, '/Odometry', self._callback, 10)
+        self.create_subscription(
+            Odometry, '/localization/lio_to_enu', self._kabsch_cb, latch_qos)
 
         self._pub_local  = self.create_publisher(Odometry, '/odometry/lio', 10)
         self._pub_global = self.create_publisher(Odometry, '/odometry/lio/global', 10)
@@ -263,19 +273,25 @@ class LioRelay(Node):
 
         return out
 
-    def _global_pose_cov(self) -> list[float]:
-        """Build a distance-scaled pose covariance for the global channel.
+    def _kabsch_cb(self, msg: Odometry) -> None:
+        """Receive updated Kabsch transform from lio_to_enu."""
+        self._kabsch_odom    = msg
+        self._cov_kabsch_pos = msg.pose.covariance[0]
+        self._cov_kabsch_rot = msg.pose.covariance[35]
+        self._d_since_kabsch = 0.0   # reset drift accumulator on new estimate
+        self.get_logger().info(
+            f'lio_relay: Kabsch transform updated -- '
+            f'cov_pos={self._cov_kabsch_pos:.4f} m2')
 
-        Position variance:  max(floor², (k_drift_pos · d)²)
-        Rotation variance:  max(floor², (k_drift_rot · d)²)
+    def _kabsch_pose_cov(self) -> list[float]:
+        """Grow pose covariance from the Kabsch baseline as the robot moves.
 
-        The linear-in-distance model is conservative (worst-case open field).
-        It ensures GPS can always override LIO once a few metres are travelled,
-        while LIO dominates at startup when scan-matching is most accurate.
+        cp = cov_kabsch_pos + (k_drift_pos * d_since_kabsch)^2
+        cr = cov_kabsch_rot + (k_drift_rot * d_since_kabsch)^2
         """
-        d = self._total_distance
-        cp = max(self._cov_pos_floor, (self._k_drift_pos * d) ** 2)
-        cr = max(self._cov_rot_floor, (self._k_drift_rot * d) ** 2)
+        d  = self._d_since_kabsch
+        cp = self._cov_kabsch_pos + (self._k_drift_pos * d) ** 2
+        cr = self._cov_kabsch_rot + (self._k_drift_rot * d) ** 2
         return _build_diag_cov36([cp, cp, cp, cr, cr, cr])
 
     # ── Subscription callback ─────────────────────────────────────────────────
@@ -300,10 +316,10 @@ class LioRelay(Node):
         t_tmp, q_tmp = _compose(t_oc, q_oc, t_cb, q_cb)
         t_ob,  q_ob  = _compose(t_tmp, q_tmp, t_bb, q_bb)
 
-        # Accumulate distance for global covariance scaling.
+        # Accumulate odom-frame distance for Kabsch covariance growth.
         if self._last_t_ob is not None:
             step = float(np.linalg.norm(t_ob - self._last_t_ob))
-            self._total_distance += step
+            self._d_since_kabsch += step
         self._last_t_ob = t_ob.copy()
 
         # Rotate twist from body frame into base_link frame.
@@ -325,12 +341,23 @@ class LioRelay(Node):
                                 av[0], av[1], av[2],
                                 self._local_pose_cov))
 
-        # Global EKF stream: distance-proportional covariance (frame_id=map, absolute)
-        self._pub_global.publish(
-            self._make_odometry(stamp, 'map', t_ob, q_ob,
-                                lv[0], lv[1], lv[2],
-                                av[0], av[1], av[2],
-                                self._global_pose_cov()))
+        # Global EKF stream: Kabsch-corrected map-frame pose.
+        # Only publish once a Kabsch transform is available.
+        if self._kabsch_odom is not None:
+            k = self._kabsch_odom
+            t_k = np.array([k.pose.pose.position.x,
+                            k.pose.pose.position.y,
+                            k.pose.pose.position.z])
+            q_k = np.array([k.pose.pose.orientation.x,
+                            k.pose.pose.orientation.y,
+                            k.pose.pose.orientation.z,
+                            k.pose.pose.orientation.w])
+            t_map, q_map = _compose(t_k, q_k, t_ob, q_ob)
+            self._pub_global.publish(
+                self._make_odometry(stamp, 'map', t_map, q_map,
+                                    lv[0], lv[1], lv[2],
+                                    av[0], av[1], av[2],
+                                    self._kabsch_pose_cov()))
 
 
 def main(args=None):

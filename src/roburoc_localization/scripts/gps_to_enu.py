@@ -1,358 +1,162 @@
 #!/usr/bin/env python3
 """
-gps_to_enu.py — Convert GPS NavSatFix to local cartesian Odometry aligned to
-                 the FAST_LIO odom frame, expressed at base_link.
+gps_to_enu.py — Convert NavSatFix to ENU Odometry (map frame) for the live stack.
 
-Replaces navsat_transform in the offline bag-processing pipeline.
+The first RTK-quality fix (position_covariance[0] < rtk_cov_max) becomes the
+ENU datum / map-frame origin.  Subsequent fixes are expressed as flat-Earth ENU
+offsets from that origin and published as the raw GPS ANTENNA position in the
+map frame (child_frame_id=gps).
+
+No lever-arm correction is applied here — that requires a globally consistent
+heading which is not available until the Kabsch alignment in lio_to_enu is
+solved.  gps_relay subscribes to /odometry/gps/raw and /localization/lio_to_enu
+and publishes the lever-arm-corrected base_link position on /odometry/gps once
+aligned.
+
+The datum is also published once on /localization/datum (transient_local QoS) so
+that lio_to_enu can receive it even if it starts after this node.
+
+Publications
+------------
+  /odometry/gps/raw     nav_msgs/Odometry  frame_id=map  child=gps
+  /localization/datum   sensor_msgs/NavSatFix  (transient_local, published once)
 
 Subscriptions
 -------------
-  /ublox_gps_node/fix          (sensor_msgs/NavSatFix)
-  /ublox_gps_node/fix_velocity (geometry_msgs/TwistWithCovarianceStamped, ENU)
-  <odom_topic>                 (nav_msgs/Odometry, default /odometry/lio — for current yaw)
-
-Publication
------------
-  /odometry/gps/raw  (nav_msgs/Odometry, frame_id=odom, child_frame_id=base_link)
-
-Algorithm
----------
-  1. Origin: first GPS fix with status ≥ 0 sets (lat0, lon0).  The datum is
-     the GPS antenna position at that moment.  Because FAST_LIO's odom origin is
-     base_link (not the antenna), ENU (0,0) is offset from odom (0,0) by the
-     lever arm (lx, ly).  This is corrected in step 3b so that the published
-     track starts at base_link = odom (0,0) at t=0.
-  2. Flat-Earth ENU: east = Δlon·cos(lat0)·R, north = Δlat·R  (valid ≤ 10 km).
-  3. Frame alignment — ENU → odom:
-       FAST_LIO's odom frame has  x = robot-forward-at-init,  y = robot-left-at-init.
-       Once the robot exceeds `speed_threshold` m/s, `bearing_samples` GPS velocity
-       bearing readings are averaged (circular mean) to lock the rotation angle H.
-           x_odom_antenna = east·sin(H) + north·cos(H)
-           y_odom_antenna = -east·cos(H) + north·sin(H)
-  4. Lever-arm correction — antenna → base_link:
-       The GPS antenna is mounted at (lx, ly) in the base_link frame (from URDF).
-       Using the current robot yaw ψ from <odom_topic> (/odometry/lio):
-           x_base = x_odom_antenna - (lx·cos ψ - ly·sin ψ)
-           y_base = y_odom_antenna - (lx·sin ψ + ly·cos ψ)
-       If no /Odometry yaw is available yet, the last known yaw (or 0.0) is used.
-  5. Fallback: if `bearing_timeout` seconds elapse without the robot moving, publish
-     raw ENU at the antenna position (frame_id='gps_enu') so there is always output.
+  /ublox_gps_node/fix    sensor_msgs/NavSatFix
 
 Parameters
 ----------
-  speed_threshold   (float, default 0.3):  Min GPS speed (m/s) to start bearing estimation.
-  bearing_samples   (int,   default 5):    Number of velocity samples to average.
-  bearing_timeout   (float, default 15.0): Wall seconds to wait before falling back to ENU.
-  datum_lat         (float, default nan):  Fixed datum latitude  (degrees).  When set together
-                                           with datum_lon, the node skips auto-detect and uses
-                                           this as the map-frame GPS origin every session.
-                                           Use this for cross-session route repeatability.
-                                           Leave as nan (default) for same-session operation.
-  datum_lon         (float, default nan):  Fixed datum longitude (degrees).  See datum_lat.
-  lever_arm_x       (float, default -0.428): GPS antenna X in base_link frame (from URDF).
-  lever_arm_y       (float, default  0.295): GPS antenna Y in base_link frame (from URDF).
-  odom_topic        (str,   default '/odometry/lio'): Odometry topic to read robot yaw from.
-                             Use /odometry/lio (lio_relay output, odom frame) — not /Odometry
-                             (raw FAST-LIO, camera_init frame) — to get the correct odom-frame
-                             yaw for lever-arm correction.
-
-Usage
------
-  Launched automatically by localization_replay.launch.py.
-  To run standalone:
-    ros2 run roburoc_localization gps_to_enu.py
+  rtk_cov_max   float  0.01  Max east covariance [m^2] to accept a datum fix
+  sentinel_cov  float  1e6   Position covariance sentinel [m^2]
+  datum_lat     float  nan   Fixed datum latitude  [deg] (optional, cross-session)
+  datum_lon     float  nan   Fixed datum longitude [deg] (optional, cross-session)
 """
 
 import math
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import QoSDurabilityPolicy, QoSProfile
 
-from geometry_msgs.msg import TwistWithCovarianceStamped
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import NavSatFix
 
-# WGS-84 equatorial radius (metres)
 _R_EARTH = 6_378_137.0
 
 
 class GpsToEnu(Node):
 
     def __init__(self):
-        super().__init__('gps_to_enu')
+        super().__init__("gps_to_enu")
 
-        # ── Parameters ───────────────────────────────────────────────────────
-        self.declare_parameter('speed_threshold', 0.3)
-        self.declare_parameter('bearing_samples', 5)
-        self.declare_parameter('bearing_timeout', 15.0)
-        self.declare_parameter('vel_max_age', 0.05)  # seconds; drop cached velocity if older
-        # Fixed datum for cross-session route repeatability.
-        # When both are provided (not nan), the node uses them as the map-frame
-        # GPS origin instead of auto-detecting from the first fix.
-        self.declare_parameter('datum_lat', float('nan'))
-        self.declare_parameter('datum_lon', float('nan'))
-        # Maximum east-variance (m²) allowed before the datum is accepted.
-        # position_covariance[0] = east variance (m²); sqrt gives std dev.
-        # ZED-F9P RTK fixed: ~0.0001–0.001 m² (1–3 cm std dev).
-        # GNSS-single / float: ~1–25 m² → cleanly rejected.
-        # Default 0.01 m² = 10 cm threshold: passes RTK fixed, blocks everything else.
-        # Override: datum_cov_max:=1.0 to accept GNSS-single outdoors without base.
-        self.declare_parameter('datum_cov_max', 0.01)
-        # Lever arm: GPS antenna position expressed in base_link frame (from URDF).
-        # Update these if the antenna is remounted.
-        self.declare_parameter('lever_arm_x', -0.428)  # metres forward of base_link
-        self.declare_parameter('lever_arm_y',  0.295)  # metres left   of base_link
-        self.declare_parameter('odom_topic', '/odometry/lio')
+        self.declare_parameter("rtk_cov_max",  0.01)
+        self.declare_parameter("sentinel_cov", 1e6)
+        self.declare_parameter("datum_lat",    float("nan"))
+        self.declare_parameter("datum_lon",    float("nan"))
 
-        self._speed_thr  = self.get_parameter('speed_threshold').value
-        self._n_samples  = int(self.get_parameter('bearing_samples').value)
-        self._timeout    = self.get_parameter('bearing_timeout').value
-        self._vel_max_age = self.get_parameter('vel_max_age').value
-        self._lx         = self.get_parameter('lever_arm_x').value
-        self._ly         = self.get_parameter('lever_arm_y').value
-        odom_topic       = self.get_parameter('odom_topic').value
-        self._datum_cov_max = self.get_parameter('datum_cov_max').value
+        self._rtk_cov_max = self.get_parameter("rtk_cov_max").value
+        self._sentinel    = self.get_parameter("sentinel_cov").value
 
-        _datum_lat = self.get_parameter('datum_lat').value
-        _datum_lon = self.get_parameter('datum_lon').value
+        _datum_lat = self.get_parameter("datum_lat").value
+        _datum_lon = self.get_parameter("datum_lon").value
 
-        # ── State ─────────────────────────────────────────────────────────────
-        # Pre-seed datum from parameters when both are provided.
-        # This pins the map frame to a fixed GPS coordinate across sessions.
         if not (math.isnan(_datum_lat) or math.isnan(_datum_lon)):
             self._lat0 = _datum_lat
             self._lon0 = _datum_lon
-            self._datum_wall_sec = self.get_clock().now().nanoseconds * 1e-9
             self.get_logger().info(
-                f'gps_to_enu: FIXED datum loaded from parameters — '
-                f'lat={_datum_lat:.6f}°, lon={_datum_lon:.6f}°. '
-                f'Map frame is GPS-anchored for cross-session route repeatability.'
-            )
+                f"gps_to_enu: fixed datum -- lat={_datum_lat:.6f} lon={_datum_lon:.6f}")
         else:
-            self._lat0 = None   # will be set from first GPS fix
+            self._lat0 = None
             self._lon0 = None
-            self._datum_wall_sec = None
-            self.get_logger().info(
-                'gps_to_enu: no fixed datum — origin will be set from first GPS fix.'
-            )
 
-        # Bearing alignment (radians, compass: 0=North, +π/2=East)
-        self._bearing: float | None = None
-        self._bearing_buf: list[float] = []
-        self._fallen_back = False
+        self._datum_published: bool = False
 
-        # Current robot yaw in odom frame, updated from odom_topic (/odometry/lio).
-        # Defaults to 0.0 (used before the first message arrives).
-        self._yaw: float = 0.0
+        latch_qos = QoSProfile(
+            depth=1, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
 
-        # Latest fix_velocity message; updated on every callback for twist population.
-        self._last_vel: TwistWithCovarianceStamped | None = None
+        self.create_subscription(NavSatFix, "/ublox_gps_node/fix", self._fix_cb, 10)
 
-        # ── I/O ───────────────────────────────────────────────────────────────
-        self.create_subscription(
-            NavSatFix,
-            '/ublox_gps_node/fix',
-            self._fix_cb,
-            10,
-        )
-        self.create_subscription(
-            TwistWithCovarianceStamped,
-            '/ublox_gps_node/fix_velocity',
-            self._vel_cb,
-            10,
-        )
-        self.create_subscription(
-            Odometry,
-            odom_topic,
-            self._odom_cb,
-            10,
-        )
-        self._pub = self.create_publisher(Odometry, '/odometry/gps/raw', 10)
+        self._pub_gps   = self.create_publisher(Odometry,  "/odometry/gps/raw",  10)
+        self._pub_datum = self.create_publisher(NavSatFix, "/localization/datum", latch_qos)
 
-        # Timeout watchdog — fires at wall-clock rate regardless of sim time
-        self._watchdog = self.create_timer(1.0, self._watchdog_cb)
+        if self._lat0 is not None:
+            self._publish_datum_now(NavSatFix(), self._lat0, self._lon0)
 
         self.get_logger().info(
-            f'gps_to_enu: speed_threshold={self._speed_thr} m/s, '
-            f'bearing_samples={self._n_samples}, '
-            f'bearing_timeout={self._timeout} s, '
-            f'lever_arm=({self._lx:.3f}, {self._ly:.3f}) m'
-        )
-
-    # ── Odometry callback: track current yaw ───────────────────────────────
-
-    def _odom_cb(self, msg: Odometry) -> None:
-        # Extract yaw from the quaternion (only z and w matter for a yaw-only rotation)
-        q = msg.pose.pose.orientation
-        # yaw = atan2(2(wz + xy), 1 - 2(yy + zz))  — full formula for robustness
-        siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
-        cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
-        self._yaw = math.atan2(siny_cosp, cosy_cosp)
-
-    # ── Velocity callback: bearing estimation ────────────────────────────────
-
-    def _vel_cb(self, msg: TwistWithCovarianceStamped) -> None:
-        self._last_vel = msg                    # always cache latest velocity
-        if self._bearing is not None:
-            return                              # bearing already locked; nothing else to do
-
-        v_east  = msg.twist.twist.linear.x     # ENU East
-        v_north = msg.twist.twist.linear.y     # ENU North
-        speed   = math.hypot(v_east, v_north)
-
-        if speed < self._speed_thr:
-            return
-
-        bearing = math.atan2(v_east, v_north)  # compass (0=N, +π/2=E)
-        self._bearing_buf.append(bearing)
-
-        if len(self._bearing_buf) >= self._n_samples:
-            # Circular mean to avoid wrap-around artefacts near ±π
-            sin_sum = sum(math.sin(b) for b in self._bearing_buf)
-            cos_sum = sum(math.cos(b) for b in self._bearing_buf)
-            self._bearing = math.atan2(sin_sum, cos_sum)
-            self.get_logger().info(
-                f'gps_to_enu: bearing locked from GPS velocity → '
-                f'{math.degrees(self._bearing):.1f}° (0=N, +90=E). '
-                f'Output frame: odom (aligned to FAST_LIO).'
-            )
-            self._watchdog.cancel()
-
-    # ── Fix callback: convert and publish ────────────────────────────────────
+            f"gps_to_enu: rtk_cov_max={self._rtk_cov_max} m2  "
+            f"Publishing raw antenna positions on /odometry/gps/raw (child=gps). "
+            f"Lever-arm correction is applied by lio_to_enu after Kabsch alignment.")
 
     def _fix_cb(self, msg: NavSatFix) -> None:
-        if msg.status.status < 0:              # NavSatStatus.STATUS_NO_FIX = -1
+        if msg.status.status < 0:
             return
 
-        lat, lon = msg.latitude, msg.longitude
+        cov_e  = msg.position_covariance[0]
+        cov_n  = msg.position_covariance[4]
+        cov_ok = msg.position_covariance_type > 0
 
-        # Set datum on first valid fix (only when no fixed datum was pre-loaded)
         if self._lat0 is None:
-            # Gate on position covariance — block bad indoor/float fixes.
-            # position_covariance_type: 0=unknown, 1=approx, 2=diagonal_known, 3=full.
-            cov_type = msg.position_covariance_type
-            cov_east = msg.position_covariance[0]   # east variance (m²)
-            if cov_type == 0 or cov_east > self._datum_cov_max:
-                east_std = math.sqrt(max(cov_east, 0.0))
-                thr_std  = math.sqrt(self._datum_cov_max)
+            if not cov_ok or cov_e > self._rtk_cov_max:
                 self.get_logger().warn(
-                    f'gps_to_enu: datum NOT set — GPS too imprecise '
-                    f'(cov_type={cov_type}, east_std={east_std:.2f} m '
-                    f'vs threshold {thr_std:.2f} m). '
-                    f'Wait for RTK fixed (carr_soln=2).'
-                )
+                    f"gps_to_enu: waiting for RTK datum -- "
+                    f"east_std={math.sqrt(max(cov_e, 0.0)):.3f} m "
+                    f"(need < {math.sqrt(self._rtk_cov_max):.3f} m)",
+                    throttle_duration_sec=10.0)
                 return
-            self._lat0 = lat
-            self._lon0 = lon
-            self._datum_wall_sec = self.get_clock().now().nanoseconds * 1e-9
+            self._lat0 = msg.latitude
+            self._lon0 = msg.longitude
             self.get_logger().info(
-                f'gps_to_enu: datum auto-set from first GPS fix → lat={lat:.6f}°, lon={lon:.6f}°'
-            )
-            return                             # skip origin itself (0,0)
+                f"gps_to_enu: RTK datum set -- lat={self._lat0:.6f} lon={self._lon0:.6f}")
+            self._publish_datum_now(msg, self._lat0, self._lon0)
+            return
 
-        if self._bearing is None and not self._fallen_back:
-            return                             # waiting for bearing lock or timeout
+        east  = (math.radians(msg.longitude - self._lon0)
+                 * math.cos(math.radians(self._lat0)) * _R_EARTH)
+        north = math.radians(msg.latitude - self._lat0) * _R_EARTH
 
-        # Flat-Earth ENU (valid for distances << 100 km from datum)
-        east  = math.radians(lon - self._lon0) * math.cos(math.radians(self._lat0)) * _R_EARTH
-        north = math.radians(lat - self._lat0) * _R_EARTH
-
-        if self._fallen_back:
-            # No bearing available — publish raw ENU at antenna position (no correction)
-            x, y  = east, north
-            frame = 'gps_enu'
-        else:
-            # Step 3 — Rotate ENU → FAST_LIO odom frame using initial compass bearing H:
-            #   FAST_LIO x (forward) = [sin H, cos H] in ENU
-            #   FAST_LIO y (left)    = [-cos H, sin H] in ENU
-            H  = self._bearing
-            xa =  east * math.sin(H) + north * math.cos(H)   # antenna in odom
-            ya = -east * math.cos(H) + north * math.sin(H)
-
-            # Origin correction: the ENU datum was set at the GPS antenna position,
-            # but FAST_LIO's odom origin is base_link.  At t=0 (yaw=0) the antenna
-            # sits at (lx, ly) in odom, so ENU (0,0) should map to odom (lx, ly),
-            # not (0,0).  Adding (lx, ly) here fixes the constant datum offset so
-            # that the GPS track is anchored to base_link at t=0.
-            xa += self._lx
-            ya += self._ly
-
-            # Step 4 — Lever-arm correction: shift antenna → base_link
-            # The antenna offset (lx, ly) in base_link is rotated by current yaw ψ
-            # into the odom frame, then subtracted:
-            #   p_base = p_antenna - R(ψ) * [lx, ly]
-            psi  = self._yaw
-            x    = xa - (self._lx * math.cos(psi) - self._ly * math.sin(psi))
-            y    = ya - (self._lx * math.sin(psi) + self._ly * math.cos(psi))
-            frame = 'odom'
-
-        odom                      = Odometry()
-        odom.header.stamp         = msg.header.stamp
-        odom.header.frame_id      = frame
-        odom.child_frame_id       = 'base_link'
-        odom.pose.pose.position.x = x
-        odom.pose.pose.position.y = y
+        # No lever-arm correction here — heading is unknown before Kabsch
+        # alignment.  lio_to_enu applies the lever arm once aligned and
+        # publishes the corrected base_link position on /odometry/gps.
+        odom = Odometry()
+        odom.header.stamp    = msg.header.stamp
+        odom.header.frame_id = "map"
+        odom.child_frame_id  = "gps"
+        odom.pose.pose.position.x = east
+        odom.pose.pose.position.y = north
         odom.pose.pose.position.z = 0.0
         odom.pose.pose.orientation.w = 1.0
-        # Horizontal position covariance from NavSatFix (row-major 3×3 → 6×6 slots)
-        odom.pose.covariance[0]  = msg.position_covariance[0]   # xx ≈ east var
-        odom.pose.covariance[7]  = msg.position_covariance[4]   # yy ≈ north var
-        odom.pose.covariance[14] = 0.01                         # zz fixed
 
-        # Velocity: rotate fix_velocity into the publishing frame and populate twist.
-        # Gate on timestamp age relative to this fix to avoid merging stale data.
-        fix_sec = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
-        vel_fresh = (
-            self._last_vel is not None
-            and abs(fix_sec - (self._last_vel.header.stamp.sec
-                               + self._last_vel.header.stamp.nanosec * 1e-9))
-            <= self._vel_max_age
-        )
-        if vel_fresh:
-            lv = self._last_vel.twist.twist.linear
-            c  = self._last_vel.twist.covariance    # 6×6 row-major
-            if self._fallen_back:
-                # No bearing available — pass ENU velocity through unchanged
-                odom.twist.twist.linear.x = lv.x   # vEast
-                odom.twist.twist.linear.y = lv.y   # vNorth
-                odom.twist.covariance     = list(c)
-            else:
-                # Rotate ENU velocity → odom frame using bearing H
-                # R = [[sH, cH], [-cH, sH]]
-                H        = self._bearing
-                sH, cH   = math.sin(H), math.cos(H)
-                odom.twist.twist.linear.x =  lv.x * sH + lv.y * cH
-                odom.twist.twist.linear.y = -lv.x * cH + lv.y * sH
-                # Rotate 2×2 horizontal covariance: C_odom = R·C_enu·R^T
-                cee, cen = c[0], c[1]
-                cne, cnn = c[6], c[7]
-                rc00 =  sH * cee + cH * cne;  rc01 =  sH * cen + cH * cnn
-                rc10 = -cH * cee + sH * cne;  rc11 = -cH * cen + sH * cnn
-                odom.twist.covariance[0] =  rc00 * sH  + rc01 *  cH   # vx-vx
-                odom.twist.covariance[1] =  rc00 * (-cH) + rc01 * sH  # vx-vy
-                odom.twist.covariance[6] =  rc10 * sH  + rc11 *  cH   # vy-vx
-                odom.twist.covariance[7] =  rc10 * (-cH) + rc11 * sH  # vy-vy
+        if cov_ok:
+            odom.pose.covariance[0]  = cov_e
+            odom.pose.covariance[7]  = cov_n
+            odom.pose.covariance[14] = 0.01
+        else:
+            for i in (0, 7, 14):
+                odom.pose.covariance[i] = self._sentinel
 
-        self._pub.publish(odom)
+        for i in (21, 28, 35):
+            odom.pose.covariance[i] = self._sentinel
 
-    # ── Timeout watchdog ──────────────────────────────────────────────────────
+        self._pub_gps.publish(odom)
 
-    def _watchdog_cb(self) -> None:
-        if self._datum_wall_sec is None:
-            return                             # datum not set yet
-
-        elapsed = self.get_clock().now().nanoseconds * 1e-9 - self._datum_wall_sec
-        if elapsed < self._timeout:
+    def _publish_datum_now(self, fix_msg: NavSatFix,
+                           lat: float, lon: float) -> None:
+        if self._datum_published:
             return
-
-        self._watchdog.cancel()
-        self._fallen_back = True
-        self.get_logger().warn(
-            f'gps_to_enu: no motion detected after {self._timeout:.0f} s — '
-            f'falling back to raw ENU output (x=East, y=North, frame_id=gps_enu). '
-            f'FAST_LIO and GPS tracks will be rotated relative to each other by the '
-            f'robot\'s initial heading.'
-        )
+        datum = NavSatFix()
+        datum.header.stamp    = self.get_clock().now().to_msg()
+        datum.header.frame_id = "map"
+        datum.latitude        = lat
+        datum.longitude       = lon
+        datum.altitude        = getattr(fix_msg, "altitude", 0.0) or 0.0
+        datum.position_covariance_type = fix_msg.position_covariance_type
+        datum.position_covariance      = list(fix_msg.position_covariance)
+        self._pub_datum.publish(datum)
+        self._datum_published = True
+        self.get_logger().info(
+            f"gps_to_enu: datum published on /localization/datum "
+            f"(lat={lat:.6f}, lon={lon:.6f})")
 
 
 def main(args=None):
@@ -368,5 +172,5 @@ def main(args=None):
             rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -10,9 +10,11 @@
     livox_frame      — MID360 sensor origin.  Matches the livox_ros_driver2 default
                        frame_id ("livox_frame") so no extra static TF is needed.
                        FAST-LIO2 calls this frame "body" internally.
-    gps_link — RTK antenna phase centre.  Physical attachment frame; uses the
-                       _link suffix convention (REP-105).  The ublox driver stamps its
-                       NavSatFix messages with frame_id="gps" (driver default).
+    gps_link         — RTK antenna phase centre.  Physical attachment frame; uses the
+                       _link suffix convention (REP-105).
+    gps              — Driver frame alias for gps_link.  The ublox driver stamps its
+                       NavSatFix and fix_velocity messages with frame_id="gps" (driver
+                       default).  An identity joint gps_link→gps bridges the naming gap.
 
   All transforms are measured from the base_link origin (ground plane centred
   between the four wheel contact patches, X forward, Y left, Z up per REP-105).
@@ -22,7 +24,7 @@
 
   TF tree (from this file):
     base_link → livox_frame
-    base_link → gps_link
+    base_link → gps_link → gps
 
   See also:
     launch/sensors/livox_mid360_rtk.launch.py   — drivers for this config
@@ -55,6 +57,19 @@
         <parent link="base_link"/>
         <child  link="gps_link"/>
         <origin xyz="-0.4775 0.285 1.495" rpy="0 0 3.14159265"/>
+    </joint>
+
+    <!-- ── gps (driver frame alias) ──────────────────────────────────────── -->
+    <!-- The u-blox driver stamps NavSatFix and fix_velocity with            -->
+    <!-- frame_id="gps" (bare name, driver default).  This identity joint    -->
+    <!-- connects the physical gps_link to the driver frame_id, completing   -->
+    <!-- the TF chain: base_link → gps_link → gps.                           -->
+    <link name="gps"/>
+
+    <joint name="gps_link_to_gps" type="fixed">
+        <parent link="gps_link"/>
+        <child  link="gps"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
     </joint>
 
 </robot>

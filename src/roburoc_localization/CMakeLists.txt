@@ -11,6 +11,7 @@ install(DIRECTORY
 
 install(PROGRAMS
   scripts/lio_relay.py
+  scripts/lio_to_enu.py
   scripts/gps_relay.py
   scripts/gps_to_enu.py
   DESTINATION lib/${PROJECT_NAME}

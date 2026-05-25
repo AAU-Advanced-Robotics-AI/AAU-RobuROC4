@@ -7,8 +7,8 @@ Three-stage offline pipeline
       raw bag → FAST-LIO2 → <bag>_fastlio
 
   Stage 2  (offline_odometry.launch.py, fast ~20x — iterate on relay covariance,
-            GPS params, gps_scale_*):
-      <bag>_fastlio → lio_relay + gps_to_enu + gps_relay
+            GPS params, Kabsch alignment):
+      <bag>_fastlio → lio_relay + gps_to_enu + lio_to_enu + gps_relay
       → <bag>_odometry
 
   Stage 3  (this file, fast ~5x — iterate on EKF params):
@@ -23,18 +23,20 @@ are pure maths and run at 20x and 5x respectively.  This split means a
 Inputs from <bag>_odometry
 ---------------------------
   /odometry/lio          — LIO relay output (odom → base_link, differential)
-  /odometry/lio/global   — LIO relay output (map → base_link, absolute)
-  /odometry/gps          — GPS global output from gps_relay (tight anchor, x scale_global)
-  /odometry/gps/local    — GPS local output from gps_relay (soft leash, x scale_local)
+  /odometry/lio/global   — LIO relay output (map → base_link, post-Kabsch)
+  /odometry/gps          — lever-arm corrected base_link position (from lio_to_enu)
+  /odometry/gps/local    — body-frame GPS velocity (from gps_relay)
   /tf_static             — static TF tree (for robot frame lookups)
   /robot_description     — URDF
 
-GPS covariance scaling
-----------------------
-  /odometry/gps/local is pre-computed by gps_relay in Stage 2.
-  If you need to change gps_scale, re-run Stage 2 to regenerate the _odometry
-  bag, then re-run Stage 3.  Changing EKF process/initial noise or
-  sensor_timeout does NOT require re-running Stage 2.
+GPS covariance and Kabsch alignment
+-------------------------------------
+  /odometry/gps is pre-computed by lio_to_enu in Stage 2 (Kabsch alignment +
+  lever-arm correction baked in).  /odometry/gps/local is pre-computed by
+  gps_relay in Stage 2 (velocity rotated to body frame).  If you need to
+  change lever_arm, datum, or calib_min_baseline, re-run Stage 2 to
+  regenerate the _odometry bag, then re-run Stage 3.  Changing EKF
+  process/initial noise or sensor_timeout does NOT require re-running Stage 2.
 
 EKF stack nodes
 ---------------
@@ -89,9 +91,9 @@ def _launch_setup(context, *args, **kwargs):
     rate   = context.launch_configurations['rate']
     record = context.launch_configurations['record'].lower() in ('true', '1', 'yes')
 
-    # Strip _odometry or _odometry_aligned suffix so the output is always *_ekf.
+    # Strip _odometry suffix so the output is always *_ekf.
     import re as _re
-    out_bag = _re.sub(r'_odometry(_aligned)?$', '', bag) + '_ekf'
+    out_bag = _re.sub(r'_odometry$', '', bag) + '_ekf'
 
     loc_config = os.path.join(
         get_package_share_directory('roburoc_localization'), 'config', 'debug_localization.yaml'

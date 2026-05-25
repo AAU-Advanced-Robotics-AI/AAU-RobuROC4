@@ -1,13 +1,13 @@
 """
-offline_odometry.launch.py — Stage 2: frame relay + GPS conversion + covariance scaling (fast, iterate)
+offline_odometry.launch.py — Stage 2: frame relay + GPS conversion + Kabsch alignment (fast, iterate)
 
 Three-stage offline pipeline
 -----------------------------
   Stage 1  (offline_fastlio.launch.py, bottleneck — run ONCE per recording):
       raw bag → FAST-LIO2 → <bag>_fastlio
 
-  Stage 2  (this file, fast ~20x — iterate on relay covariance, GPS params, gps_scale_*):
-      <bag>_fastlio → lio_relay + gps_to_enu + gps_relay
+  Stage 2  (this file, fast ~20x — iterate on relay covariance, Kabsch, GPS params):
+      <bag>_fastlio → lio_relay + gps_to_enu + lio_to_enu + gps_relay
       → <bag>_odometry
 
   Stage 3  (offline_ekf.launch.py, fast ~5x — iterate on EKF params):
@@ -20,19 +20,15 @@ What is tunable at this stage
       relative to GPS.  Inflate if GPS corrections are too slow; deflate if
       the EKF drifts too far from GPS.
 
-  gps_to_enu bearing / lever-arm params  (launch args below):
-      speed_threshold, bearing_samples — tighten or loosen the bearing-lock
-      condition if the initial GPS track diverges from the LIO track.
+  lio_to_enu Kabsch params  (config/localization.yaml or inline):
+      calib_min_baseline — metres of RTK-quality motion needed before the
+        first alignment is published.  Increase if early GPS noise causes a
+        poor initial alignment.
       lever_arm_x / y — loaded from config/sensor_mount.yaml.
 
-  gps_scale_global / gps_scale_local  (launch args, defaults 1.0 / 3.0):
-      GPS covariance multipliers for the global and local EKF inputs.
-      scale_global=1.0 trusts the receiver's covariance exactly (tight anchor).
-      scale_local=3.0 makes GPS a soft drift leash so LIO dominates locally.
-      GPS covariance scaling lives here (not in Stage 3) because it is a
-      property of the GPS representation, not of the EKF tuning.  After
-      changing gps_scale_*, re-run Stage 2 to regenerate the _odometry bag;
-      Stage 3 can then re-run without touching the EKF parameters.
+  datum_lat / datum_lon  (launch args, default nan):
+      Pin the ENU origin to a fixed GPS coordinate for cross-session route
+      repeatability.  Leave as nan to auto-set from the first RTK-quality fix.
 
 Data flow
 ---------
@@ -40,15 +36,17 @@ Data flow
       └──→ lio_relay ─────────────────────────── /odometry/lio
                                                   (odom → base_link, REP-105)
                                               ── /odometry/lio/global
-                                                  (map → base_link, absolute)
+                                                  (map → base_link, post-Kabsch)
 
   <bag>_fastlio (/ublox_gps_node/fix, /fix_velocity)
-      └──→ gps_to_enu ────────────────────────── /odometry/gps/raw
-                                                  (odom → base_link, metres)
-            └──→ gps_relay ──────────────────── /odometry/gps
-                                                  (global EKF anchor, x scale_global)
-                                              ── /odometry/gps/local
-                                                  (local EKF soft leash, x scale_local)
+      └──→ gps_to_enu ──────────────────────── /odometry/gps/raw
+                                                  (map → gps, raw antenna ENU)
+                                               ── /localization/datum  (transient_local)
+            └──→ lio_to_enu ──────────────── /localization/lio_to_enu  (transient_local)
+            └──→ gps_relay ──────────────── /odometry/gps
+                                                  (map → base_link, lever-arm corrected)
+                                               ── /odometry/gps/local
+                                                  (body-frame velocity, local EKF)
 
 Static TFs (from <bag>_fastlio bag replay)
 ------------------------------------------
@@ -61,9 +59,12 @@ Static TFs (from <bag>_fastlio bag replay)
 Recorded topics in <bag>_odometry
 ------------------------------------
   /odometry/lio              — relay output (odom → base_link, differential source)
-  /odometry/lio/global       — relay output (map → base_link, absolute source)
-  /odometry/gps              — GPS global output (tight anchor, x scale_global)
-  /odometry/gps/local        — GPS local output (soft leash, x scale_local)
+  /odometry/lio/global       — relay output (map → base_link, post-Kabsch)
+  /odometry/gps/raw          — raw antenna ENU position (map → gps)
+  /odometry/gps              — lever-arm corrected position (map → base_link)
+  /odometry/gps/local        — body-frame GPS velocity (local EKF input)
+  /localization/datum        — ENU origin NavSatFix (transient_local)
+  /localization/lio_to_enu   — Kabsch transform odom→map (transient_local)
   /ublox_gps_node/fix        — raw NavSatFix (covariance reference)
   /ublox_gps_node/fix_velocity — GPS ENU velocity
   /tf_static                 — passed through from <bag>_fastlio
@@ -78,9 +79,10 @@ Usage
   ros2 launch roburoc_localization offline_odometry.launch.py \\
       bag:=$HOME/rosbags/roburoc_lio_20260423_201310_fastlio rate:=30.0
 
-  # Tune GPS covariance scale
+  # Pin ENU datum for cross-session route repeatability
   ros2 launch roburoc_localization offline_odometry.launch.py \\
-      bag:=$HOME/rosbags/roburoc_lio_20260423_201310_fastlio gps_scale:=10.0
+      bag:=$HOME/rosbags/roburoc_lio_20260423_201310_fastlio \\
+      datum_lat:=57.01234 datum_lon:=9.98765
 
   # Dry-run — stream into PlotJuggler without writing a bag
   ros2 launch roburoc_localization offline_odometry.launch.py \\
@@ -131,8 +133,8 @@ def _launch_setup(context, *args, **kwargs):
     bag       = os.path.expanduser(context.launch_configurations['bag'].rstrip('/'))
     rate      = context.launch_configurations['rate']
     record    = context.launch_configurations['record'].lower() in ('true', '1', 'yes')
-    scale_local  = context.launch_configurations['gps_scale_local']
-    scale_global = context.launch_configurations['gps_scale_global']
+    datum_lat = context.launch_configurations.get('datum_lat', 'nan')
+    datum_lon = context.launch_configurations.get('datum_lon', 'nan')
 
     out_bag = bag.removesuffix('_fastlio') + '_odometry'
 
@@ -154,42 +156,56 @@ def _launch_setup(context, *args, **kwargs):
             parameters=[loc_config, {'use_sim_time': True}],
         ),
 
-        # ── GPS → local cartesian ─────────────────────────────────────────────
-        # Derives ENU→odom rotation from GPS velocity compass bearing at first
-        # motion; lever-arm correction uses yaw from /odometry/lio (odom frame).
-        # Lever-arm values loaded from config/sensor_mount.yaml [gps_antenna].
+        # ── GPS → ENU cartesian ───────────────────────────────────────────────
+        # Converts NavSatFix → ENU Odometry, sets datum from first RTK fix.
+        # Publishes /odometry/gps/raw (raw antenna position) and
+        # /localization/datum (transient_local, consumed by lio_to_enu).
         Node(
             package='roburoc_localization',
             executable='gps_to_enu.py',
             name='gps_to_enu',
             output='screen',
             parameters=[{
-                'use_sim_time':    True,
-                'speed_threshold': 0.3,
-                'bearing_samples': 5,
-                'bearing_timeout': 15.0,
-                'lever_arm_x':    float(_GPS['lever_arm_x']),
-                'lever_arm_y':    float(_GPS['lever_arm_y']),
-                'odom_topic':     '/odometry/lio',
+                'use_sim_time': True,
+                'datum_lat':    float(datum_lat),
+                'datum_lon':    float(datum_lon),
             }],
         ),
 
-        # ── GPS relay: /odometry/gps/raw → /odometry/gps + /odometry/gps/local ──────────
-        # Publishes two covariance-scaled GPS streams from gps_to_enu's raw output:
-        #   /odometry/gps        (global EKF — tight anchor, scale_global)
-        #   /odometry/gps/local  (local EKF — soft drift leash, scale_local)
-        # Mirrors lio_relay: primary topic = most common use case, /sub = secondary.
-        # Tuning gps_scale_* is a Stage 2 operation: after changing, re-run Stage 2
-        # to regenerate the _odometry bag; Stage 3 iterates on EKF params alone.
+        # ── LIO/GPS Kabsch alignment ──────────────────────────────────────────
+        # Online SE(2) Kabsch alignment of LIO odom frame → GPS ENU frame.
+        # State machine: WAITING_DATUM → ALIGNING → ALIGNED (after 8 m baseline).
+        # Publishes /localization/lio_to_enu (transient_local, consumed by
+        # lio_relay and gps_relay) and /odometry/gps (lever-arm corrected
+        # base_link position in map frame, global EKF input).
+        Node(
+            package='roburoc_localization',
+            executable='lio_to_enu.py',
+            name='lio_to_enu',
+            output='screen',
+            parameters=[{
+                'use_sim_time': True,
+                'lever_arm_x':  float(_GPS['lever_arm_x']),
+                'lever_arm_y':  float(_GPS['lever_arm_y']),
+                'datum_lat':    float(datum_lat),
+                'datum_lon':    float(datum_lon),
+            }],
+        ),
+
+        # ── GPS relay: position + velocity → base_link frame ────────────────
+        # Applies lever-arm correction to /odometry/gps/raw and publishes
+        # /odometry/gps (base_link position in map frame, global EKF input).
+        # Also rotates fix_velocity (ENU) → body frame and publishes
+        # /odometry/gps/local (velocity-only, local EKF input).
         Node(
             package='roburoc_localization',
             executable='gps_relay.py',
             name='gps_relay',
             output='screen',
-            parameters=[loc_config, {
+            parameters=[{
                 'use_sim_time': True,
-                'scale_local':  float(scale_local),
-                'scale_global': float(scale_global),
+                'lever_arm_x':  float(_GPS['lever_arm_x']),
+                'lever_arm_y':  float(_GPS['lever_arm_y']),
             }],
         ),
 
@@ -232,6 +248,8 @@ def _launch_setup(context, *args, **kwargs):
                     '/odometry/gps/raw',
                     '/odometry/gps',
                     '/odometry/gps/local',
+                    '/localization/datum',
+                    '/localization/lio_to_enu',
                     '/ublox_gps_node/fix',
                     '/ublox_gps_node/fix_velocity',
                     '/tf_static',
@@ -264,21 +282,18 @@ def generate_launch_description():
             ),
         ),
         DeclareLaunchArgument(
-            'gps_scale_global',
-            default_value='1.0',
+            'datum_lat',
+            default_value='nan',
             description=(
-                'GPS covariance scale for the global EKF (/odometry/gps).  '
-                '1.0 trusts the receiver covariance exactly.  Raise to loosen the '
-                'GPS anchor on the map frame.  Changing requires re-running Stage 2.'
+                'Fixed datum latitude (degrees) for cross-session route repeatability.  '
+                'Leave as nan to auto-set from the first RTK-quality fix.'
             ),
         ),
         DeclareLaunchArgument(
-            'gps_scale_local',
-            default_value='3.0',
+            'datum_lon',
+            default_value='nan',
             description=(
-                'GPS covariance scale for the local EKF (/odometry/gps/local).  '
-                'High value (3) makes GPS a soft drift leash; LIO dominates '
-                'scan-to-scan motion.  Changing requires re-running Stage 2.'
+                'Fixed datum longitude (degrees).  Must be provided together with datum_lat.'
             ),
         ),
         DeclareLaunchArgument(

@@ -18,7 +18,7 @@ Copyright 2024 Thomas Schou Sørensen, Julian Witold Wagner and César Zacharie 
    See the License for the specific language governing permissions and
    limitations under the License.
 """
-import canopen, os, logging
+import canopen, os, logging, time, threading
 from canopen import SdoCommunicationError
 
 import rclpy
@@ -62,6 +62,9 @@ class RobuROC_Canopen(Node):
         self._CAN_PERIODICTASK = {}
         self._PERIODIC_ID = 0
         self._CONNECTED = False
+        self._bus_error_state = False
+        self._last_error_log_time: float = 0.0
+        self._reconnect_thread: threading.Thread = None
 
         # Initialize subscriptions
         self.WriteSub = self.create_subscription(CANWrite, '/roburoc/CANWrite', self.Write_CB, 10)
@@ -256,7 +259,10 @@ class RobuROC_Canopen(Node):
             sent_data = bytearray(data)
         try:
             task = self.CAN_NETWORK.send_periodic(cobid, sent_data, period)
-            self._CAN_PERIODICTASK.setdefault(self._PERIODIC_ID, task)
+            self._CAN_PERIODICTASK.setdefault(
+                self._PERIODIC_ID,
+                (task, cobid, bytes(sent_data) if sent_data is not None else None, period)
+            )
             self._PERIODIC_ID += 1
             return True
         except Exception as error:
@@ -270,7 +276,7 @@ class RobuROC_Canopen(Node):
         :return: Bool success
         """
         try:
-            self._CAN_PERIODICTASK[key].stop()
+            self._CAN_PERIODICTASK[key][0].stop()
             del self._CAN_PERIODICTASK[key]
             return True
         except Exception as error:
@@ -399,16 +405,72 @@ class RobuROC_Canopen(Node):
         :param data: The data to be sent (as a list of hexadecimals or ints).
         :return: Bool: True if the write operation was successful, False otherwise.
         """
+        if self._bus_error_state:
+            return False  # drop writes silently while bus is recovering
         data = list(data)
-        success = None
         try:
             self.CAN_NODES[node_id].sdo.download(indices[0], indices[1], bytearray(data))
-            success = True
+            return True
         except Exception as e:
-            self.logger.error(f"Error writing to SDO {indices[0]}:{indices[1]} in node {node_id}, error: {e}")
-            success = False
-        finally:
-            return success
+            now = time.monotonic()
+            if now - self._last_error_log_time > 5.0:
+                self.logger.error(
+                    f"CAN bus error on SDO {indices[0]}:{indices[1]} node {node_id}: {e} "
+                    "— entering error state, attempting reconnect"
+                )
+                self._last_error_log_time = now
+            if not self._bus_error_state:
+                self._bus_error_state = True
+                self._start_reconnect_thread()
+            return False
+
+    def _start_reconnect_thread(self):
+        if self._reconnect_thread is not None and self._reconnect_thread.is_alive():
+            return
+        self._reconnect_thread = threading.Thread(target=self._reconnect_worker, daemon=True)
+        self._reconnect_thread.start()
+
+    def _reconnect_worker(self):
+        """Background thread: wait, disconnect, reconnect, restore subscriptions + periodic tasks."""
+        sleep(3.0)
+        bustype = self.get_parameter('bustype').get_parameter_value().string_value
+        channel = self.get_parameter('channel').get_parameter_value().string_value
+        bitrate = self.get_parameter('bitrate').get_parameter_value().integer_value
+        while True:
+            self.logger.info("CAN bus reconnect attempt...")
+            try:
+                self.CAN_NETWORK.disconnect()
+            except Exception:
+                pass
+            self.CAN_NODES.clear()
+            try:
+                self.CAN_NETWORK.scanner.nodes.clear()
+            except Exception:
+                pass
+            self._CONNECTED = False
+
+            if self.Connect(bustype, channel, bitrate):
+                self.logger.info("CAN bus reconnected — restoring subscriptions and periodic tasks")
+                # Re-subscribe to all previously registered COBIDs
+                old_subs = list(self._CAN_SUBSCRIPTION)
+                self._CAN_SUBSCRIPTION.clear()
+                for cobid in old_subs:
+                    self.Subscribe(cobid, self.Generic_callback)
+                # Re-start periodic tasks (heartbeat etc.) from stored parameters
+                old_tasks = dict(self._CAN_PERIODICTASK)
+                self._CAN_PERIODICTASK.clear()
+                for key, (task_obj, cobid, stored_data, period) in old_tasks.items():
+                    try:
+                        new_task = self.CAN_NETWORK.send_periodic(cobid, stored_data, period)
+                        self._CAN_PERIODICTASK[key] = (new_task, cobid, stored_data, period)
+                    except Exception as e:
+                        self.logger.warning(f"Failed to re-start periodic task {hex(cobid)}: {e}")
+                self._bus_error_state = False
+                return
+            else:
+                self.logger.warning("CAN bus reconnect failed — retrying in 5 s")
+                sleep(5.0)
+
     def PDOwrite(self, COBID: int, data: list):
         """
         Write data to a mapped RPDO object (Controlword)

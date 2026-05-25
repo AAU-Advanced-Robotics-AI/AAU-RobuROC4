@@ -1,28 +1,36 @@
 """
-Localization launch — FAST-LIO + Dual EKF + gps_to_enu
+Localization launch — FAST-LIO + Dual EKF + GPS/LIO Kabsch alignment
 
 Fuses FAST-LIO2 LiDAR-inertial odometry with u-blox ZED-F9P RTK-GPS to
 produce both local and global state estimates.
 
   lio_relay    /Odometry (FAST-LIO2) → /odometry/lio + /odometry/lio/global
-  gps_to_enu   GPS fix + velocity bearing → /odometry/gps/raw  (odom frame)
-               Heading is estimated from GPS velocity at first motion —
-               move straight forward briefly after startup.
-  gps_relay    /odometry/gps/raw → /odometry/gps + /odometry/gps/local
+  gps_to_enu   GPS fix → ENU Odometry → /odometry/gps/raw + /localization/datum
+  lio_to_enu   Kabsch alignment → /localization/lio_to_enu
+  gps_relay    lever-arm correction → /odometry/gps  |  velocity → /odometry/gps/local
   ekf_local    odom → base_link  (smooth LIO, published as /odom)
-  ekf_global   map  → odom       (GPS-anchored, published as /odometry/filtered/global)
+  ekf_global   GPS-anchored global pose; owns map→odom TF (publish_tf: true)
 
 Data flow:
   /Odometry (FAST-LIO2)
-      → lio_relay → /odometry/lio       → ekf_local  (differential)
-                  → /odometry/lio/global → ekf_global (absolute)
-  /ublox_gps_node/fix + /ublox_gps_node/fix_velocity
-      → gps_to_enu → /odometry/gps/raw
-      → gps_relay  → /odometry/gps       → ekf_global (tight anchor)
-                   → /odometry/gps/local → ekf_local  (soft leash)
+      → lio_relay → /odometry/lio         → ekf_local  (differential)
+                  → /odometry/lio/global   → ekf_global (absolute)
+  /ublox_gps_node/fix
+      → gps_to_enu → /odometry/gps/raw    → gps_relay (position input)
+                   → /localization/datum   → lio_to_enu (ENU origin)
+      → lio_to_enu → /localization/lio_to_enu → lio_relay (for /lio/global)
+                                               → gps_relay (Kabsch theta)
+      → gps_relay  → /odometry/gps         → ekf_global (lever-arm corrected)
+  /ublox_gps_node/fix_velocity
+      → gps_relay → /odometry/gps/local    → ekf_local  (body-frame velocity)
+
+  lio_to_enu accumulates a sliding window of (LIO antenna, GPS antenna ENU)
+  pairs and runs online Kabsch alignment to estimate the 2-D rigid transform
+  T: odom→ENU.  ekf_global fuses /odometry/lio/global and /odometry/gps to
+  produce the map→odom TF (publish_tf: true).
 
 Cross-session route repeatability (datum):
-  By default gps_to_enu auto-sets its map origin from the first GPS fix.
+  By default gps_to_enu auto-sets its ENU origin from the first RTK-quality fix.
   Pass datum_lat + datum_lon to pin the map frame to a fixed GPS coordinate
   so that routes recorded in one session replay at the same physical location
   in future sessions.  Edit config/field_datum.yaml and source it, or pass
@@ -68,12 +76,10 @@ def generate_launch_description():
     _lever_arm_x = float(_gps['lever_arm_x'])
     _lever_arm_y = float(_gps['lever_arm_y'])
 
-    use_sim_time     = LaunchConfiguration('use_sim_time')
-    gps_scale_local  = LaunchConfiguration('gps_scale_local')
-    gps_scale_global = LaunchConfiguration('gps_scale_global')
-    rviz_use         = LaunchConfiguration('rviz')
-    datum_lat        = LaunchConfiguration('datum_lat')
-    datum_lon        = LaunchConfiguration('datum_lon')
+    use_sim_time = LaunchConfiguration('use_sim_time')
+    rviz_use     = LaunchConfiguration('rviz')
+    datum_lat    = LaunchConfiguration('datum_lat')
+    datum_lon    = LaunchConfiguration('datum_lon')
 
     return LaunchDescription([
 
@@ -96,23 +102,6 @@ def generate_launch_description():
             'rviz',
             default_value='false',
             description='Launch RViz alongside FAST-LIO',
-        ),
-        DeclareLaunchArgument(
-            'gps_scale_global',
-            default_value='1.0',
-            description=(
-                'GPS covariance scale for the global EKF (/odometry/gps).  '
-                '1.0 trusts the receiver covariance exactly.'
-            ),
-        ),
-        DeclareLaunchArgument(
-            'gps_scale_local',
-            default_value='3.0',
-            description=(
-                'GPS covariance scale for the local EKF (/odometry/gps/local).  '
-                'High value makes GPS a soft drift leash; LIO dominates '
-                'scan-to-scan motion.'
-            ),
         ),
         DeclareLaunchArgument(
             'datum_lat',
@@ -155,43 +144,61 @@ def generate_launch_description():
             parameters=[config_file, {'use_sim_time': use_sim_time}],
         ),
 
-        # ── GPS → local cartesian (replaces navsat_transform_node) ───────
-        # Derives ENU→odom rotation from GPS velocity at first motion.
-        # IMPORTANT: drive straight forward briefly after startup so the
-        # bearing lock triggers before attempting any navigation.
-        # Lever-arm values loaded from config/sensor_mount.yaml.
-        # datum_lat/datum_lon: when set, pins the map origin to a fixed GPS
-        # coordinate for cross-session route repeatability.
+
+        # ── GPS → ENU (antenna position) ──────────────────────────────────
+        # Converts NavSatFix to flat-Earth ENU Odometry (raw antenna position,
+        # no lever-arm correction).  The first RTK-quality fix becomes the ENU
+        # datum / map-frame origin.
+        # Publishes:
+        #   /odometry/gps/raw     — GPS antenna pos in map frame (child=gps)
+        #   /localization/datum   — datum NavSatFix (transient_local, once)
         Node(
             package='roburoc_localization',
             executable='gps_to_enu.py',
             name='gps_to_enu',
             output='screen',
             parameters=[{
-                'use_sim_time':    use_sim_time,
-                'speed_threshold': 0.3,
-                'bearing_samples': 5,
-                'bearing_timeout': 15.0,
-                'lever_arm_x':     _lever_arm_x,
-                'lever_arm_y':     _lever_arm_y,
-                'odom_topic':      '/odometry/lio',
-                'datum_lat':       datum_lat,
-                'datum_lon':       datum_lon,
+                'use_sim_time': use_sim_time,
+                'datum_lat':    datum_lat,
+                'datum_lon':    datum_lon,
             }],
         ),
 
-        # ── GPS relay: /odometry/gps/raw → two covariance-scaled streams ─
-        #   /odometry/gps        — global EKF input (tight anchor, ×scale_global)
-        #   /odometry/gps/local  — local EKF input  (soft drift leash, ×scale_local)
+        # ── LIO / GPS Kabsch alignment ─────────────────────────────────────
+        # Computes the optimal 2-D rigid transform T: odom→ENU using a sliding
+        # window of (LIO antenna, GPS antenna ENU) pairs.  No TF is published —
+        # ekf_global owns the map→odom TF (publish_tf: true).
+        # Publishes:
+        #   /localization/lio_to_enu  — Kabsch transform (transient_local)
+        #   /odometry/gps             — lever-arm corrected base_link in map
+        Node(
+            package='roburoc_localization',
+            executable='lio_to_enu.py',
+            name='lio_to_enu',
+            output='screen',
+            parameters=[{
+                'use_sim_time': use_sim_time,
+                'lever_arm_x':  _lever_arm_x,
+                'lever_arm_y':  _lever_arm_y,
+                'datum_lat':    datum_lat,
+                'datum_lon':    datum_lon,
+            }],
+        ),
+
+        # ── GPS relay: position + velocity → base_link frame ─────────────────
+        # Applies the lever-arm correction to /odometry/gps/raw (antenna
+        # position) and publishes /odometry/gps (base_link, map frame).
+        # Also rotates fix_velocity (ENU) into base_link and publishes
+        # /odometry/gps/local.  Both only after Kabsch alignment is available.
         Node(
             package='roburoc_localization',
             executable='gps_relay.py',
             name='gps_relay',
             output='screen',
-            parameters=[config_file, {
-                'scale_local':  gps_scale_local,
+            parameters=[{
                 'use_sim_time': use_sim_time,
-                'scale_global': gps_scale_global,
+                'lever_arm_x':  float(_lever_arm_x),
+                'lever_arm_y':  float(_lever_arm_y),
             }],
         ),
 

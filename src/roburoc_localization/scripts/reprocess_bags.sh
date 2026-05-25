@@ -5,12 +5,11 @@
 #
 #   1. Topic check  — verify the _fastlio bag contains all required topics.
 #   2. Stage 2      — offline_odometry.launch.py → _odometry bag.
-#   3. Kabsch align — kabsch_align.py --write-aligned → _odometry_aligned bag.
-#                     Prints rotation/translation residuals for extrinsic cal.
-#   4. Stage 3      — offline_ekf.launch.py on _odometry_aligned → _ekf bag.
+#                     lio_to_enu performs online Kabsch alignment during replay.
+#   3. Stage 3      — offline_ekf.launch.py on _odometry → _ekf bag.
 #
-# Existing _odometry, _odometry_aligned, and _ekf bags are deleted before each
-# run so outputs are always fresh.
+# Existing _odometry and _ekf bags are deleted before each run so outputs are
+# always fresh.
 #
 # Usage:
 #   ./reprocess_bags.sh [rate_s2 [rate_s3]]
@@ -24,8 +23,9 @@ RATE_S2="${1:-20.0}"
 RATE_S3="${2:-15.0}"
 
 FOLDERS=(
-    "$HOME/RobuROC_ROSbags/ad_hoc_tests"
-    "$HOME/RobuROC_ROSbags/reference_paths"
+    # "$HOME/RobuROC_ROSbags/ad_hoc_tests"
+    # "$HOME/RobuROC_ROSbags/reference_paths"
+    "$HOME/rosbags/test_day"
 )
 
 # Topics that must be present in a _fastlio bag before processing.
@@ -107,14 +107,12 @@ info "  Stage-3 rate : ${RATE_S3}x"
 echo ""
 
 FAILED=()
-declare -A KABSCH_RESULTS  # name → summary line for final report
 
 for i in "${!FASTLIO_BAGS[@]}"; do
     fastlio_bag="${FASTLIO_BAGS[$i]}"
     base="${fastlio_bag%_fastlio}"
     name="$(basename "$base")"
     odometry_bag="${base}_odometry"
-    aligned_bag="${odometry_bag}_aligned"
     ekf_bag="${base}_ekf"
     idx=$(( i + 1 ))
 
@@ -131,7 +129,7 @@ for i in "${!FASTLIO_BAGS[@]}"; do
     info "  All required topics present."
 
     # Delete stale derived bags
-    for stale in "$odometry_bag" "$aligned_bag" "$ekf_bag"; do
+    for stale in "$odometry_bag" "$ekf_bag"; do
         if [[ -d "$stale" ]]; then
             warn "  Deleting stale: $(basename "$stale")"
             rm -rf "$stale"
@@ -144,49 +142,21 @@ for i in "${!FASTLIO_BAGS[@]}"; do
             bag:="$fastlio_bag" rate:="$RATE_S2"; then
         info "  Stage 2 done → $(basename "$odometry_bag")"
     else
-        error "  Stage 2 FAILED for $name — skipping Kabsch + EKF"
+        error "  Stage 2 FAILED for $name — skipping EKF"
         FAILED+=("$name (stage 2)")
         continue
     fi
 
     if [[ ! -d "$odometry_bag" ]]; then
-        error "  Stage 2 produced no output bag — skipping Kabsch + EKF"
+        error "  Stage 2 produced no output bag — skipping EKF"
         FAILED+=("$name (stage 2 no output)")
         continue
     fi
 
-    # ── 3. Kabsch alignment ───────────────────────────────────────────────────
-    info "  Kabsch alignment (GPS ↔ LIO) ..."
-    kabsch_log="$(mktemp)"
-    ekf_input_bag="$aligned_bag"   # default; overridden to odometry_bag on failure
-    if python3 "$SCRIPT_DIR/kabsch_align.py" \
-            "$odometry_bag" \
-            --write-aligned \
-            2>&1 | tee "$kabsch_log"; then
-
-        # Extract summary lines for the final report
-        theta_line="$(grep -m1 'Rotation θ'    "$kabsch_log" || true)"
-        trans_line="$(grep -m1 'Translation t'  "$kabsch_log" || true)"
-        rms_line="$(  grep -m1 'Fit RMS'        "$kabsch_log" || true)"
-        KABSCH_RESULTS["$name"]="${theta_line}  |  ${trans_line}  |  ${rms_line}"
-        info "  Kabsch done → $(basename "$aligned_bag")"
-    else
-        warn "  Kabsch could not align $name (see above) — running EKF on unaligned odometry bag"
-        KABSCH_RESULTS["$name"]="  (no alignment — Kabsch failed)"
-        ekf_input_bag="$odometry_bag"
-    fi
-    rm -f "$kabsch_log"
-
-    if [[ ! -d "$ekf_input_bag" ]]; then
-        error "  EKF input bag missing: $(basename "$ekf_input_bag") — skipping EKF"
-        FAILED+=("$name (no ekf input)")
-        continue
-    fi
-
-    # ── 4. Stage 3: EKF ──────────────────────────────────────────────────────
-    info "  Stage 3 (EKF) on $(basename "$ekf_input_bag") ..."
+    # ── 3. Stage 3: EKF ──────────────────────────────────────────────────────
+    info "  Stage 3 (EKF) on $(basename "$odometry_bag") ..."
     if ros2 launch roburoc_localization offline_ekf.launch.py \
-            bag:="$ekf_input_bag" rate:="$RATE_S3"; then
+            bag:="$odometry_bag" rate:="$RATE_S3"; then
         info "  Stage 3 done → $(basename "$ekf_bag")"
     else
         error "  Stage 3 FAILED for $name"
@@ -199,16 +169,7 @@ done
 # ── Final report ─────────────────────────────────────────────────────────────
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo " Kabsch alignment summary (GPS ↔ LIO residuals per dataset)"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-# Sort by dataset name for reproducible output
-while IFS= read -r name; do
-    echo "  $name"
-    echo "    ${KABSCH_RESULTS[$name]}"
-done < <(printf '%s\n' "${!KABSCH_RESULTS[@]}" | sort)
 
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 if [[ ${#FAILED[@]} -eq 0 ]]; then
     info "All $TOTAL datasets processed successfully."
 else
