@@ -45,6 +45,21 @@ EKF stack nodes
   ekf_global   fuses /odometry/lio/global + /odometry/gps
                → publishes /odometry/filtered/global  (map → odom TF)
 
+Recorded topics in <bag>_ekf
+-----------------------------
+  /odom                      — local EKF output (odom → base_link)
+  /odometry/filtered/global  — global EKF output (map → odom)
+  /odometry/gps              — pass-through (global EKF anchor)
+  /odometry/gps/raw          — pass-through (raw antenna ENU)
+  /odometry/gps/local        — pass-through (local EKF velocity input)
+  /odometry/lio              — pass-through for comparison
+  /odometry/lio/global       — pass-through (LIO in ENU, pre-EKF)
+  /localization/lio_to_enu   — Kabsch transform (debug reference)
+  /localization/datum        — ENU origin
+  /diagnostics
+  /tf_static
+  /robot_description
+
 Tuning workflow
 ---------------
   1. Edit config/localization.yaml (process_noise_covariance,
@@ -167,10 +182,16 @@ def _launch_setup(context, *args, **kwargs):
                     '-o', out_bag,
                     '/odom',
                     '/odometry/filtered/global',
-                    '/odometry/gps',           # pass-through (global EKF anchor)
-                    '/odometry/gps/local',     # pass-through (local EKF soft leash)
-                    '/odometry/lio',           # pass-through for comparison
+                    '/odometry/gps',             # pass-through (global EKF anchor)
+                    '/odometry/gps/raw',         # pass-through (raw antenna ENU)
+                    '/odometry/gps/local',       # pass-through (local EKF soft leash)
+                    '/odometry/lio',             # pass-through for comparison
+                    '/odometry/lio/global',      # pass-through (LIO in ENU, pre-EKF)
+                    '/localization/lio_to_enu',  # Kabsch transform (debug reference)
+                    '/localization/datum',       # ENU origin
                     '/diagnostics',
+                    '/tf_static',
+                    '/robot_description',
                     '--use-sim-time',
                 ],
                 output='screen',

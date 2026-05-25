@@ -165,7 +165,8 @@ class LioToEnu(Node):
 
         # -- GPS quality tracking ---------------------------------------------
         self._gps_ok: bool = False
-        self._last_rtk_wall: Optional[float] = None
+        self._last_rtk_wall: Optional[float] = None   # header stamp of last rtk_ok+moving fix
+        self._last_recv_stamp: Optional[float] = None  # header stamp of last received fix (any quality)
 
         # -- LIO pose buffer --------------------------------------------------
         # Entries: (stamp_sec, x, y, psi)
@@ -276,7 +277,7 @@ class LioToEnu(Node):
             return
 
         fix_sec  = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
-        wall_now = self.get_clock().now().nanoseconds * 1e-9
+        self._last_recv_stamp = fix_sec
         cov_e    = msg.position_covariance[0]
         cov_n    = msg.position_covariance[4]
         cov_ok   = msg.position_covariance_type > 0
@@ -300,7 +301,7 @@ class LioToEnu(Node):
         moving = speed >= self._speed_thr
 
         if rtk_ok and moving:
-            self._last_rtk_wall = wall_now
+            self._last_rtk_wall = fix_sec
             if not self._gps_ok:
                 self._on_gps_acquired()
 
@@ -360,7 +361,9 @@ class LioToEnu(Node):
     def _gps_loss_cb(self) -> None:
         if not self._gps_ok or self._last_rtk_wall is None:
             return
-        elapsed = self.get_clock().now().nanoseconds * 1e-9 - self._last_rtk_wall
+        # Use header-stamp difference (rate-independent: unaffected by executor lag at
+        # high bag-replay rates where the sim clock can run ahead of processed callbacks).
+        elapsed = self._last_recv_stamp - self._last_rtk_wall
         if elapsed < self._gps_lost_to:
             return
         self._gps_ok = False

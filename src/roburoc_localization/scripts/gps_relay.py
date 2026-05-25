@@ -120,10 +120,14 @@ class GpsRelay(Node):
         if self._theta_kabsch is None:
             return
 
-        # RTK quality check: gps_to_enu sets sentinel covariance for bad fixes
+        # Only skip fixes where gps_to_enu set the sentinel covariance
+        # (position_covariance_type was UNKNOWN).  All other fixes — even with
+        # covariance above the rtk_cov_max datum threshold — are passed through
+        # so the EKF can weight them by their actual covariance value instead of
+        # causing hard dropouts and trajectory jumps.
         cov_e = msg.pose.covariance[0]
         cov_n = msg.pose.covariance[7]
-        if cov_e > self._rtk_cov_max or cov_n > self._rtk_cov_max:
+        if cov_e >= self._sentinel or cov_n >= self._sentinel:
             return
 
         # Lever-arm correction: base_link = antenna - R(yaw_ENU) @ [lx, ly]

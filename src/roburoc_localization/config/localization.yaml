@@ -38,10 +38,16 @@
 #   cov_pos/cov_rot proportionally to the minimum eigenvalue.
 lio_relay:
   ros__parameters:
-    cov_pos:   0.1    # position diagonal variance [m²]
-    cov_rot:   0.05   # orientation diagonal variance [rad²]
-    cov_vel:   0.05   # linear velocity diagonal variance [(m/s)²]
-    cov_omega: 0.01   # angular velocity diagonal variance [(rad/s)²]
+    # Local channel: constant per-step noise (for ekf_local, differential mode).
+    cov_pos_local:  0.001   # position diagonal variance per scan step [m²]
+    cov_rot_local:  0.0001  # orientation diagonal variance per scan step [rad²]
+    cov_vel:        0.05    # linear velocity diagonal variance [(m/s)²]
+    cov_omega:      0.01    # angular velocity diagonal variance [(rad/s)²]
+    # Global channel: Kabsch baseline + distance-proportional growth (for ekf_global).
+    cov_pos_floor:  0.01    # minimum position variance floor [m²] (= 0.1 m σ)
+    cov_rot_floor:  0.0001  # minimum rotation variance floor [rad²]
+    k_drift_pos:    0.02    # position drift rate [m error / m travelled]
+    k_drift_rot:    0.0003  # rotation drift rate [rad / m travelled]
 
 # ─── GPS relay ────────────────────────────────────────────────────────────────
 # Takes /odometry/gps/raw (from navsat_transform or gps_to_enu) and publishes

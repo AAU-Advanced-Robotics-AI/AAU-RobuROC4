@@ -275,7 +275,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'rate',
-            default_value='20.0',
+            default_value='10.0',
             description=(
                 'Bag playback rate.  lio_relay, gps_to_enu, and '
                 'gps_relay are all pure maths; 20x is conservative.'

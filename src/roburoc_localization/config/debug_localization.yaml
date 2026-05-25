@@ -93,21 +93,12 @@ ekf_local:
     odom0_pose_rejection_threshold: 9.0
     odom0_twist_rejection_threshold: 9.0
 
-    # ── Sensor 1: GPS — DISABLED for step 1 ─────────────────────────────────
-    # Re-enable in step 2 once the LIO-only plumbing is verified.
-    #
-    #odom1: /odometry/gps/local
-    #odom1_config: [true,  true,  false,
-    #               false, false, false,
-    #               false, false, false,
-    #               false, false, false,
-    #               false, false, false]
-    #odom1_queue_size: 10
-    #odom1_nodelay: true
-    #odom1_differential: false           # GPS is absolute — never differential
-    #odom1_relative: false
-    #odom1_pose_rejection_threshold: 2.0
-    odom1: /ublox_gps_node/fix_velocity
+    # ── Sensor 1: GPS Doppler velocity (body frame, from gps_relay) ─────────
+    # gps_relay rotates the raw ENU fix_velocity into body frame and publishes
+    # as nav_msgs/Odometry on /odometry/gps/local — gated on Kabsch alignment.
+    # Fuse only the twist (vx, vy); pose rows carry sentinel covariance and
+    # are intentionally excluded.
+    odom1: /odometry/gps/local
     odom1_config: [false, false, false,
                    false, false, false,
                    true,  true,  false,
@@ -117,9 +108,7 @@ ekf_local:
     odom1_nodelay: true
     odom1_differential: false
     odom1_relative: false
-    odom1_pose_rejection_threshold: 5.0   # never evaluated — odom1_config fuses only twist (vx,vy);
-                                           # pose threshold is only applied to fused pose components.
-                                           # set to 5.0 as an explicit don't-care value.
+    odom1_pose_rejection_threshold: 5.0   # never evaluated — odom1_config fuses only twist (vx,vy)
     odom1_twist_rejection_threshold: 9.0  # GPS Doppler vx,vy.  Loose on purpose: after a canopy
                                            # gap the LIO-only velocity estimate may drift 0.5-1 m/s
                                            # from truth; 9σ allows GPS re-acquisition without
