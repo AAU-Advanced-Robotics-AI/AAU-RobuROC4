@@ -28,6 +28,13 @@ FOLDERS=(
     "$HOME/rosbags/test_day"
 )
 
+# Bags recorded live (already contain /Odometry from FAST-LIO2 — no Stage 1
+# needed).  Each entry is a bag directory path; they are processed directly as
+# Stage-2 inputs alongside the _fastlio bags above.
+RAW_BAG_FOLDERS=(
+    "$HOME/data/rosbags"
+)
+
 # Topics that must be present in a _fastlio bag before processing.
 REQUIRED_TOPICS=(
     "/Odometry"
@@ -92,6 +99,18 @@ mapfile -t FASTLIO_BAGS < <(
             continue
         fi
         find "$folder" -maxdepth 1 -type d -name '*_fastlio' | sort
+    done
+    # Raw live bags (contain /Odometry directly — skip Stage 1).
+    # Exclude bags that are already derived outputs (_fastlio, _odometry, _ekf).
+    for folder in "${RAW_BAG_FOLDERS[@]}"; do
+        if [[ ! -d "$folder" ]]; then
+            warn "Raw-bag folder not found, skipping: $folder"
+            continue
+        fi
+        find "$folder" -maxdepth 1 -type d \
+            ! -name '*_fastlio' \
+            ! -name '*_odometry' \
+            ! -name '*_ekf' | sort
     done
 )
 

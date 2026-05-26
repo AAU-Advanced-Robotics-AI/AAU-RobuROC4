@@ -130,13 +130,13 @@ class LioToEnu(Node):
 
         # -- Parameters -------------------------------------------------------
         self.declare_parameter("calib_min_baseline",  5.0)
-        self.declare_parameter("rtk_cov_max",         0.01)
+        self.declare_parameter("rtk_cov_max",         0.05)
         self.declare_parameter("speed_threshold",     0.20)
         self.declare_parameter("lever_arm_x",        -0.4775)
         self.declare_parameter("lever_arm_y",         0.285)
         self.declare_parameter("calib_timeout",      90.0)
-        self.declare_parameter("drift_update_dist",  10.0)
-        self.declare_parameter("drift_window_dist",  50.0)
+        self.declare_parameter("drift_update_dist",  2.0)
+        self.declare_parameter("drift_window_dist",  20.0)
         self.declare_parameter("min_window_pairs",    5)
         self.declare_parameter("gps_lost_timeout",    2.0)
         self.declare_parameter("lio_topic",          "/odometry/lio")

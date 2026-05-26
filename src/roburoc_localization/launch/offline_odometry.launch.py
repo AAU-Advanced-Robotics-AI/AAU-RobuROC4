@@ -139,7 +139,7 @@ def _launch_setup(context, *args, **kwargs):
     out_bag = bag.removesuffix('_fastlio') + '_odometry'
 
     loc_config = os.path.join(
-        get_package_share_directory('roburoc_localization'), 'config', 'localization.yaml'
+        get_package_share_directory('roburoc_localization'), 'config', 'debug_localization.yaml'
     )
 
     nodes = [
@@ -183,7 +183,7 @@ def _launch_setup(context, *args, **kwargs):
             executable='lio_to_enu.py',
             name='lio_to_enu',
             output='screen',
-            parameters=[{
+            parameters=[loc_config, {
                 'use_sim_time': True,
                 'lever_arm_x':  float(_GPS['lever_arm_x']),
                 'lever_arm_y':  float(_GPS['lever_arm_y']),

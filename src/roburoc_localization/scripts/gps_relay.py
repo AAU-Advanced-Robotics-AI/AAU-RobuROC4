@@ -70,16 +70,21 @@ class GpsRelay(Node):
         self.declare_parameter("rtk_cov_max",   0.01)
         self.declare_parameter("vel_max_age",   0.5)
         self.declare_parameter("sentinel_cov",  1e6)
+        self.declare_parameter("scale_global",  1.0)
+        self.declare_parameter("scale_local",   1.0)
 
-        self._lx          = self.get_parameter("lever_arm_x").value
-        self._ly          = self.get_parameter("lever_arm_y").value
-        self._rtk_cov_max = self.get_parameter("rtk_cov_max").value
-        self._vel_max_age = self.get_parameter("vel_max_age").value
-        self._sentinel    = self.get_parameter("sentinel_cov").value
+        self._lx           = self.get_parameter("lever_arm_x").value
+        self._ly           = self.get_parameter("lever_arm_y").value
+        self._rtk_cov_max  = self.get_parameter("rtk_cov_max").value
+        self._vel_max_age  = self.get_parameter("vel_max_age").value
+        self._sentinel     = self.get_parameter("sentinel_cov").value
+        self._scale_global = self.get_parameter("scale_global").value
+        self._scale_local  = self.get_parameter("scale_local").value
 
-        self._last_vel:     TwistWithCovarianceStamped | None = None
-        self._yaw_odom:     float = 0.0
-        self._theta_kabsch: float | None = None   # odom->ENU rotation angle
+        self._last_vel:        TwistWithCovarianceStamped | None = None
+        self._last_fix_stamp:  float | None = None   # header stamp of last /odometry/gps/raw
+        self._yaw_odom:        float = 0.0
+        self._theta_kabsch:    float | None = None   # odom->ENU rotation angle
 
         latch_qos = QoSProfile(
             depth=1, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
@@ -117,6 +122,9 @@ class GpsRelay(Node):
 
     def _gps_raw_cb(self, msg: Odometry) -> None:
         """Apply lever-arm correction and publish /odometry/gps."""
+        # Always record the incoming fix stamp for vel_max_age comparison.
+        self._last_fix_stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+
         if self._theta_kabsch is None:
             return
 
@@ -145,8 +153,8 @@ class GpsRelay(Node):
         odom.pose.pose.position.y = msg.pose.pose.position.y - lever_n
         odom.pose.pose.position.z = 0.0
         odom.pose.pose.orientation.w = 1.0
-        odom.pose.covariance[0]  = cov_e    # x-x (east)
-        odom.pose.covariance[7]  = cov_n    # y-y (north)
+        odom.pose.covariance[0]  = cov_e * self._scale_global   # x-x (east)
+        odom.pose.covariance[7]  = cov_n * self._scale_global   # y-y (north)
         odom.pose.covariance[14] = 0.01     # z  (not estimated)
         for i in (21, 28, 35):              # roll, pitch, yaw — not from GPS
             odom.pose.covariance[i] = self._sentinel
@@ -158,11 +166,14 @@ class GpsRelay(Node):
         if self._last_vel is None or self._theta_kabsch is None:
             return
 
-        # Check velocity age
-        now_sec = self.get_clock().now().nanoseconds * 1e-9
+        # Check velocity age against the last received GPS fix stamp, not the
+        # sim clock — identical to the fix applied in lio_to_enu._gps_loss_cb
+        # so that offline replay at high rates doesn't stale-drop good messages.
         vel_sec = (self._last_vel.header.stamp.sec
                    + self._last_vel.header.stamp.nanosec * 1e-9)
-        if abs(now_sec - vel_sec) > self._vel_max_age:
+        fix_sec = (self._last_fix_stamp if self._last_fix_stamp is not None
+                   else self.get_clock().now().nanoseconds * 1e-9)
+        if abs(fix_sec - vel_sec) > self._vel_max_age:
             return
 
         # Robot heading in ENU frame
@@ -198,10 +209,10 @@ class GpsRelay(Node):
         odom.twist.twist.linear.x = v_fwd
         odom.twist.twist.linear.y = v_left
         odom.twist.twist.linear.z = 0.0
-        odom.twist.covariance[0]  = float(c_body[0, 0])   # vx-vx
-        odom.twist.covariance[1]  = float(c_body[0, 1])   # vx-vy
-        odom.twist.covariance[6]  = float(c_body[1, 0])   # vy-vx
-        odom.twist.covariance[7]  = float(c_body[1, 1])   # vy-vy
+        odom.twist.covariance[0]  = float(c_body[0, 0]) * self._scale_local   # vx-vx
+        odom.twist.covariance[1]  = float(c_body[0, 1]) * self._scale_local   # vx-vy
+        odom.twist.covariance[6]  = float(c_body[1, 0]) * self._scale_local   # vy-vx
+        odom.twist.covariance[7]  = float(c_body[1, 1]) * self._scale_local   # vy-vy
         odom.twist.covariance[35] = self._sentinel          # angular vel not provided
 
         self._pub_local.publish(odom)

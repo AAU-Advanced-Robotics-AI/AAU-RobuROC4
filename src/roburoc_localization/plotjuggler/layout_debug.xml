@@ -3,58 +3,63 @@
  <tabbed_widget name="Main Window" parent="main_window">
   <Tab containers="1" tab_name="Trajectory Overview">
    <Container>
-    <DockSplitter count="2" sizes="0.500578;0.499422" orientation="-">
-     <DockSplitter count="2" sizes="0.5;0.5" orientation="|">
+    <DockSplitter sizes="0.500401;0.499599" orientation="-" count="2">
+     <DockSplitter sizes="0.5;0.5" orientation="|" count="2">
       <DockArea name="Path">
-       <plot mode="XYPlot" flip_x="false" flip_y="false" line_width="1.0">
-        <range top="14.306451" bottom="-14.808173" left="-31.886479" right="29.884904"/>
+       <plot line_width="1.0" mode="XYPlot" flip_x="false" flip_y="false">
+        <range top="4.546946" right="19.507937" left="0.276819" bottom="-6.056375"/>
         <limitY/>
-        <curve curve_x="/odometry/gps/pose/pose/position/x" name="/odometry/gps/pose/pose/position/[x;y]" color="#ff0000" curve_y="/odometry/gps/pose/pose/position/y"/>
-        <curve curve_x="/odometry/lio/pose/pose/position/x" name="/odometry/lio/pose/pose/position/[x;y]" color="#0000ff" curve_y="/odometry/lio/pose/pose/position/y"/>
-        <curve curve_x="/odom/pose/pose/position/x" name="/odom/pose/pose/position/[x;y]" color="#ff00ff" curve_y="/odom/pose/pose/position/y"/>
-        <curve curve_x="/odometry/filtered/global/pose/pose/position/x" name="/odometry/filtered/global/pose/pose/position/[x;y]" color="#ff7f0e" curve_y="/odometry/filtered/global/pose/pose/position/y"/>
+        <curve name="/odometry/gps/pose/pose/position/[x;y]" curve_y="/odometry/gps/pose/pose/position/y" color="#ff0000" curve_x="/odometry/gps/pose/pose/position/x"/>
+        <curve name="/odometry/lio/pose/pose/position/[x;y]" curve_y="/odometry/lio/pose/pose/position/y" color="#0000ff" curve_x="/odometry/lio/pose/pose/position/x"/>
+        <curve name="/odom/pose/pose/position/[x;y]" curve_y="/odom/pose/pose/position/y" color="#ff00ff" curve_x="/odom/pose/pose/position/x"/>
+        <curve name="/odometry/filtered/global/pose/pose/position/[x;y]" curve_y="/odometry/filtered/global/pose/pose/position/y" color="#ff7f0e" curve_x="/odometry/filtered/global/pose/pose/position/x"/>
+        <curve name="/odometry/lio/global/pose/pose/position/[x;y]" curve_y="/odometry/lio/global/pose/pose/position/y" color="#a4a4ff" curve_x="/odometry/lio/global/pose/pose/position/x"/>
        </plot>
       </DockArea>
       <DockArea name="Covariances">
-       <plot mode="TimeSeries" flip_x="false" flip_y="false" line_width="1.0">
-        <range top="245.689201" bottom="-5.991123" left="0.000000" right="122.975316"/>
+       <plot line_width="1.0" mode="TimeSeries" flip_x="false" flip_y="false">
+        <range top="0.839845" right="17.048547" left="12.260825" bottom="-0.019460"/>
         <limitY/>
         <curve name="/odometry/gps/pose/covariance/[0;0]" color="#ff0000"/>
         <curve name="/odometry/lio/pose/covariance/[0;0]" color="#0000ff"/>
         <curve name="/odom/pose/covariance/[0;0]" color="#ff00ff"/>
         <curve name="/odometry/filtered/global/pose/covariance/[0;0]" color="#ff7f0e"/>
+        <curve name="/odometry/lio/global/pose/covariance/[0;0]" color="#a4a4ff"/>
        </plot>
       </DockArea>
      </DockSplitter>
-     <DockSplitter count="3" sizes="0.332049;0.335902;0.332049" orientation="|">
+     <DockSplitter sizes="0.332006;0.335988;0.332006" orientation="|" count="3">
       <DockArea name="Position X">
-       <plot mode="TimeSeries" flip_x="false" flip_y="false" line_width="1.0">
-        <range top="18.833252" bottom="-20.834827" left="0.000000" right="122.975316"/>
+       <plot line_width="1.0" mode="TimeSeries" flip_x="false" flip_y="false">
+        <range top="18.847686" right="17.048547" left="12.260825" bottom="14.280036"/>
         <limitY/>
         <curve name="/odometry/gps/pose/pose/position/x" color="#ff0000"/>
         <curve name="/odometry/lio/pose/pose/position/x" color="#0000ff"/>
         <curve name="/odom/pose/pose/position/x" color="#ff00ff"/>
         <curve name="/odometry/filtered/global/pose/pose/position/x" color="#ff7f0e"/>
+        <curve name="/odometry/lio/global/pose/pose/position/x" color="#a4a4ff"/>
        </plot>
       </DockArea>
       <DockArea name="Position Y">
-       <plot mode="TimeSeries" flip_x="false" flip_y="false" line_width="1.0">
-        <range top="14.306451" bottom="-14.808173" left="0.000000" right="122.975316"/>
+       <plot line_width="1.0" mode="TimeSeries" flip_x="false" flip_y="false">
+        <range top="2.633699" right="17.048547" left="12.260825" bottom="-0.865247"/>
         <limitY/>
         <curve name="/odometry/gps/pose/pose/position/y" color="#ff0000"/>
         <curve name="/odometry/lio/pose/pose/position/y" color="#0000ff"/>
         <curve name="/odom/pose/pose/position/y" color="#ff00ff"/>
         <curve name="/odometry/filtered/global/pose/pose/position/y" color="#ff7f0e"/>
+        <curve name="/odometry/lio/global/pose/pose/position/y" color="#a4a4ff"/>
        </plot>
       </DockArea>
       <DockArea name="Yaw">
-       <plot mode="TimeSeries" flip_x="false" flip_y="false" line_width="1.0">
-        <range top="3.291814" bottom="-3.298105" left="0.000000" right="122.975316"/>
+       <plot line_width="1.0" mode="TimeSeries" flip_x="false" flip_y="false">
+        <range top="0.031467" right="17.048547" left="12.260825" bottom="-1.290158"/>
         <limitY/>
         <curve name="/odometry/gps/pose/pose/orientation/yaw" color="#ff0000"/>
         <curve name="/odometry/lio/pose/pose/orientation/yaw" color="#0000ff"/>
         <curve name="/odom/pose/pose/orientation/yaw" color="#ff00ff"/>
         <curve name="/odometry/filtered/global/pose/pose/orientation/yaw" color="#ff9900"/>
+        <curve name="/odometry/lio/global/pose/pose/orientation/yaw" color="#a4a4ff"/>
        </plot>
       </DockArea>
      </DockSplitter>
@@ -63,32 +68,32 @@
   </Tab>
   <Tab containers="1" tab_name="Position Detail">
    <Container>
-    <DockSplitter count="3" sizes="0.333333;0.333333;0.333333" orientation="-">
+    <DockSplitter sizes="0.333066;0.333868;0.333066" orientation="-" count="3">
      <DockArea name="Position X with 2 STD">
-      <plot mode="TimeSeries" flip_x="false" flip_y="false" line_width="1.0">
-       <range top="18.569182" bottom="-19.715610" left="0.000000" right="122.975316"/>
+      <plot line_width="1.0" mode="TimeSeries" flip_x="false" flip_y="false">
+       <range top="16.652264" right="17.048547" left="12.260825" bottom="14.926273"/>
        <limitY/>
        <curve name="/odometry/gps/pose/pose/position/x" color="#ff0000"/>
-       <curve name="/odometry/lio/pose/pose/position/x" color="#0000ff"/>
-       <curve name="/odom/pose/pose/position/z" color="#ff00ff"/>
+       <curve name="/odometry/lio/global/pose/pose/position/x" color="#a4a4ff"/>
+       <curve name="/odometry/filtered/global/pose/pose/position/x" color="#ff7f0e"/>
       </plot>
      </DockArea>
      <DockArea name="Position Y with 2 STD">
-      <plot mode="TimeSeries" flip_x="false" flip_y="false" line_width="1.0">
-       <range top="14.306451" bottom="-14.808173" left="0.000000" right="122.975316"/>
+      <plot line_width="1.0" mode="TimeSeries" flip_x="false" flip_y="false">
+       <range top="2.618105" right="17.048547" left="12.260825" bottom="-0.225889"/>
        <limitY/>
        <curve name="/odometry/gps/pose/pose/position/y" color="#ff0000"/>
-       <curve name="/odometry/lio/pose/pose/position/y" color="#0000ff"/>
-       <curve name="/odom/pose/pose/position/z" color="#ff00ff"/>
+       <curve name="/odometry/lio/global/pose/pose/position/y" color="#a4a4ff"/>
+       <curve name="/odometry/filtered/global/pose/pose/position/y" color="#ff7f0e"/>
       </plot>
      </DockArea>
-     <DockArea name="Position Y with 2 STD">
-      <plot mode="TimeSeries" flip_x="false" flip_y="false" line_width="1.0">
-       <range top="0.404003" bottom="-0.328715" left="0.000000" right="122.975316"/>
+     <DockArea name="Position Z with 2 STD">
+      <plot line_width="1.0" mode="TimeSeries" flip_x="false" flip_y="false">
+       <range top="0.003512" right="17.048547" left="12.260825" bottom="-0.110453"/>
        <limitY/>
        <curve name="/odometry/gps/pose/pose/position/z" color="#ff0000"/>
-       <curve name="/odometry/lio/pose/pose/position/z" color="#0000ff"/>
-       <curve name="/odom/pose/pose/position/z" color="#ff00ff"/>
+       <curve name="/odometry/lio/global/pose/pose/position/z" color="#a4a4ff"/>
+       <curve name="/odometry/filtered/global/pose/pose/position/z" color="#ff7f0e"/>
       </plot>
      </DockArea>
     </DockSplitter>
@@ -96,10 +101,10 @@
   </Tab>
   <Tab containers="1" tab_name="Orientation Detail">
    <Container>
-    <DockSplitter count="3" sizes="0.333333;0.333333;0.333333" orientation="-">
+    <DockSplitter sizes="0.333066;0.333868;0.333066" orientation="-" count="3">
      <DockArea name="...">
-      <plot mode="TimeSeries" flip_x="false" flip_y="false" line_width="1.0">
-       <range top="0.085276" bottom="-0.098470" left="0.000000" right="122.975316"/>
+      <plot line_width="1.0" mode="TimeSeries" flip_x="false" flip_y="false">
+       <range top="0.033508" right="17.048547" left="12.260825" bottom="-0.038450"/>
        <limitY/>
        <curve name="/odom/pose/pose/orientation/roll" color="#ff00ff"/>
        <curve name="/odometry/gps/pose/pose/orientation/roll" color="#ff0000"/>
@@ -107,8 +112,8 @@
       </plot>
      </DockArea>
      <DockArea name="...">
-      <plot mode="TimeSeries" flip_x="false" flip_y="false" line_width="1.0">
-       <range top="0.102898" bottom="-0.102475" left="0.000000" right="122.975316"/>
+      <plot line_width="1.0" mode="TimeSeries" flip_x="false" flip_y="false">
+       <range top="0.083423" right="17.048547" left="12.260825" bottom="-0.071845"/>
        <limitY/>
        <curve name="/odom/pose/pose/orientation/pitch" color="#ff00ff"/>
        <curve name="/odometry/gps/pose/pose/orientation/pitch" color="#ff0000"/>
@@ -116,8 +121,8 @@
       </plot>
      </DockArea>
      <DockArea name="...">
-      <plot mode="TimeSeries" flip_x="false" flip_y="false" line_width="1.0">
-       <range top="3.291814" bottom="-3.298105" left="0.000000" right="122.975316"/>
+      <plot line_width="1.0" mode="TimeSeries" flip_x="false" flip_y="false">
+       <range top="0.031467" right="17.048547" left="12.260825" bottom="-1.290158"/>
        <limitY/>
        <curve name="/odom/pose/pose/orientation/yaw" color="#ff00ff"/>
        <curve name="/odometry/gps/pose/pose/orientation/yaw" color="#ff0000"/>
@@ -129,24 +134,24 @@
   </Tab>
   <Tab containers="1" tab_name="Velocity Detail">
    <Container>
-    <DockSplitter count="1" sizes="1" orientation="-">
+    <DockSplitter sizes="1" orientation="-" count="1">
      <DockArea name="...">
-      <plot mode="TimeSeries" flip_x="false" flip_y="false" line_width="1.0">
-       <range top="1.282375" bottom="-0.031191" left="0.098672" right="168.091560"/>
+      <plot line_width="1.0" mode="TimeSeries" flip_x="false" flip_y="false">
+       <range top="1.282375" right="168.091560" left="0.098672" bottom="-0.031191"/>
        <limitY/>
       </plot>
      </DockArea>
     </DockSplitter>
    </Container>
   </Tab>
-  <currentTabIndex index="0"/>
+  <currentTabIndex index="1"/>
  </tabbed_widget>
  <use_relative_time_offset enabled="1"/>
  <!-- - - - - - - - - - - - - - - -->
  <!-- - - - - - - - - - - - - - - -->
  <Plugins>
   <plugin ID="DataLoad CSV">
-   <parameters delimiter="0" time_axis=""/>
+   <parameters time_axis="" delimiter="0"/>
   </plugin>
   <plugin ID="DataLoad MCAP"/>
   <plugin ID="DataLoad ROS2 bags">
@@ -155,7 +160,7 @@
    <max_array_size value="100"/>
    <boolean_strings_to_number value="true"/>
    <remove_suffix_from_strings value="true"/>
-   <selected_topics value="/odom;/odometry/filtered/global;/odometry/gps;/odometry/gps/local;/odometry/lio"/>
+   <selected_topics value="/odom;/odometry/filtered/global;/odometry/gps;/odometry/gps/local;/odometry/gps/raw;/odometry/lio;/odometry/lio/global"/>
   </plugin>
   <plugin ID="DataLoad ULog"/>
   <plugin ID="ROS2 Topic Subscriber">
@@ -179,21 +184,7 @@
   <plugin ID="ROS2 Topic Re-Publisher"/>
  </Plugins>
  <!-- - - - - - - - - - - - - - - -->
- <previouslyLoaded_Datafiles>
-  <fileInfo prefix="" filename="../../../../RobuROC_ROSbags/reference_paths/roburoc_lio_20260428_203540_ekf/metadata.yaml">
-   <plugin ID="DataLoad ROS2 bags">
-    <use_header_stamp value="false"/>
-    <discard_large_arrays value="true"/>
-    <max_array_size value="100"/>
-    <boolean_strings_to_number value="true"/>
-    <remove_suffix_from_strings value="true"/>
-    <selected_topics value="/diagnostics;/odom;/odometry/filtered/global;/odometry/gps;/odometry/gps/local;/odometry/lio"/>
-   </plugin>
-  </fileInfo>
- </previouslyLoaded_Datafiles>
  <!-- - - - - - - - - - - - - - - -->
- <customMathEquations/>
- <snippets/>
  <!-- - - - - - - - - - - - - - - -->
 </root>
 

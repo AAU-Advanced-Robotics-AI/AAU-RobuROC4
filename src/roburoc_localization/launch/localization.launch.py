@@ -104,6 +104,25 @@ def generate_launch_description():
             description='Launch RViz alongside FAST-LIO',
         ),
         DeclareLaunchArgument(
+            'gps_scale_global',
+            default_value='1.0',
+            description=(
+                'Multiply raw GPS position covariance for the global EKF. '
+                '1.0 = trust receiver covariance; raise if the global EKF '
+                'oscillates at RTK-fixed convergence.'
+            ),
+        ),
+        DeclareLaunchArgument(
+            'gps_scale_local',
+            default_value='1.0',
+            description=(
+                'Multiply GPS Doppler velocity covariance for the local EKF. '
+                '1.0 = trust receiver covariance; raise to soften GPS velocity '
+                'influence and let LIO increments dominate.'
+            ),
+        ),
+
+        DeclareLaunchArgument(
             'datum_lat',
             default_value='nan',
             description=(
@@ -176,7 +195,7 @@ def generate_launch_description():
             executable='lio_to_enu.py',
             name='lio_to_enu',
             output='screen',
-            parameters=[{
+            parameters=[config_file, {
                 'use_sim_time': use_sim_time,
                 'lever_arm_x':  _lever_arm_x,
                 'lever_arm_y':  _lever_arm_y,
@@ -199,6 +218,8 @@ def generate_launch_description():
                 'use_sim_time': use_sim_time,
                 'lever_arm_x':  float(_lever_arm_x),
                 'lever_arm_y':  float(_lever_arm_y),
+                'scale_global': LaunchConfiguration('gps_scale_global'),
+                'scale_local':  LaunchConfiguration('gps_scale_local'),
             }],
         ),
 

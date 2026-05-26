@@ -55,45 +55,6 @@ lio_relay:
     k_drift_pos:    0.01
     k_drift_rot:    0.001
 
-# ─── Kabsch alignment (lio_to_enu) ──────────────────────────────────────────
-# Controls when and how the GPS/LIO Kabsch alignment is computed.
-# lever_arm_x/y and datum_lat/lon are always overridden by the launch file
-# (loaded from sensor_mount.yaml / launch arguments).
-#
-# Key observations for tuning:
-#   If /localization/lio_to_enu has very few messages (<10 per minute), the
-#   GPS quality filter (rtk_cov_max) is rejecting most fixes or the robot
-#   isn't accumulating enough path between re-solves (drift_update_dist).
-#
-#   drift_update_dist: how many metres the robot must travel (by GPS path) before
-#     a new Kabsch solve is triggered.  Smaller = more frequent corrections but
-#     noisier (fewer pairs per window if GPS is sparse).  Start at 3-5 m for
-#     frequent outdoor manoeuvres; raise to 10 m if the Kabsch becomes jittery.
-#
-#   drift_window_dist: spatial extent of the sliding window.  A smaller window
-#     means only recent, local trajectory pairs are used — better for capturing
-#     current drift; larger windows average over more history and are more robust
-#     to GPS noise spikes but slower to react to heading drift.
-#
-#   rtk_cov_max: maximum GPS position covariance (m²) to accept a fix into the
-#     alignment window.  0.05 m² (σ≈22 cm) = RTK-fixed only.  Raise to 0.10
-#     (σ≈32 cm) or 0.20 (σ≈45 cm) to also accept GPS float fixes — useful when
-#     RTK is intermittent.  This is the most impactful param if alignment updates
-#     are too infrequent.
-#
-#   min_window_pairs: minimum number of (LIO, GPS) pairs in the window before a
-#     Kabsch solve is attempted.  Lower = recovers faster after GPS loss; raise
-#     if the transform is noisy at re-acquisition.
-lio_to_enu:
-  ros__parameters:
-    calib_min_baseline:  5.0    # m of RTK+moving GPS needed before first alignment
-    rtk_cov_max:         0.10   # m² — raised from 0.05 to also accept GPS float
-    speed_threshold:     0.10   # m/s — lowered slightly from 0.20
-    drift_update_dist:   2.0    # m between re-solves (was 10.0)
-    drift_window_dist:   20.0   # m sliding window extent (was 50.0)
-    min_window_pairs:    5      # min pairs before re-solve (was 5)
-    gps_lost_timeout:    2.0    # s without RTK before declaring GPS lost
-
 # ─── Local EKF ──────────────────────────────────────────────────────────────
 # Single sensor, 2D mode. With differential: true, the EKF integrates LIO
 # pose deltas — output should essentially mirror LIO motion.
@@ -115,40 +76,23 @@ ekf_local:
     base_link_frame: base_link
     world_frame: odom
 
-    # ── Sensor 0: LIO relay ─────────────────────────────────────────────────
-    # differential: true — fuse incremental motion (delta between consecutive
-    # poses), avoids any frame_id commitment. Standard pattern for LIO/wheel
-    # odometry feeding ekf_local.
-    odom0: /odometry/lio
-    odom0_config: [true,  true,  false,   # x, y  (z zeroed by 2D mode)
-                   false, false, true,    # yaw only
-                   false, false, false,   # FAST-LIO2 doesn't publish twist
-                   false, false, false,
-                   false, false, false]
-    odom0_queue_size: 10
-    odom0_nodelay: true
-    odom0_differential: true              # FIXED: was false — main bug
-    odom0_relative: false
-    odom0_pose_rejection_threshold: 9.0
-    odom0_twist_rejection_threshold: 9.0
-
     # ── Sensor 1: GPS Doppler velocity (body frame, from gps_relay) ─────────
     # gps_relay rotates the raw ENU fix_velocity into body frame and publishes
     # as nav_msgs/Odometry on /odometry/gps/local — gated on Kabsch alignment.
     # Fuse only the twist (vx, vy); pose rows carry sentinel covariance and
     # are intentionally excluded.
-    odom1: /odometry/gps/local
-    odom1_config: [false, false, false,
+    odom0: /odometry/gps/local
+    odom0_config: [false, false, false,
                    false, false, false,
                    true,  true,  false,
                    false, false, false,
                    false, false, false]
-    odom1_queue_size: 10
-    odom1_nodelay: true
-    odom1_differential: false
-    odom1_relative: false
-    odom1_pose_rejection_threshold: 5.0   # never evaluated — odom1_config fuses only twist (vx,vy)
-    odom1_twist_rejection_threshold: 9.0  # GPS Doppler vx,vy.  Loose on purpose: after a canopy
+    odom0_queue_size: 10
+    odom0_nodelay: true
+    odom0_differential: false
+    odom0_relative: false
+    odom0_pose_rejection_threshold: 5.0   # never evaluated — odom0_config fuses only twist (vx,vy)
+    odom0_twist_rejection_threshold: 9.0  # GPS Doppler vx,vy.  Loose on purpose: after a canopy
                                            # gap the LIO-only velocity estimate may drift 0.5-1 m/s
                                            # from truth; 9σ allows GPS re-acquisition without
                                            # rejecting the first good velocity on reacquisition.
@@ -256,28 +200,6 @@ ekf_global:
     base_link_frame: base_link
     world_frame: map
 
-    # ── Sensor 0: LIO absolute pose (frame_id: map) ─────────────────────────
-    # /odometry/lio/global has frame_id=map and differential=false.
-    # This is the primary position anchor.  With cov_pos=0.1 m² the
-    # steady-state P stabilises at ~0.1 m², giving Kalman gains of:
-    #   RTK-fixed GPS (R≈4e-4 m²):  K_GPS ≈ 0.999  → GPS completely overrides LIO
-    #   Bad GPS       (R≈80 m²):    K_GPS ≈ 0.001  → LIO holds the map frame steady
-    # Using LIO differential instead breaks this: differential mode provides no
-    # absolute position anchor, so P is set entirely by Q and GPS, and bad GPS
-    # (even with K≈0.003) accumulates ~10 m of drift over 30 s of corrections.
-    odom0: /odometry/lio/global
-    odom0_config: [true,  true,  false,   # x, y  (z zeroed by 2D mode)
-                   false, false, true,    # yaw only
-                   false, false, false,   # FAST-LIO2 doesn't publish twist
-                   false, false, false,
-                   false, false, false]
-    odom0_queue_size: 10
-    odom0_nodelay: true
-    odom0_differential: false            # absolute — frame_id=map, no TF lookup needed
-    odom0_relative: false
-    odom0_pose_rejection_threshold: 9.0
-    odom0_twist_rejection_threshold: 9.0
-
     # ── Sensor 1: GPS absolute position (frame_id: map) ──────────────────────
     # gps_relay overrides frame_id to 'map' on this topic.  That avoids the
     # circular TF dependency: ekf_global (world_frame=map) receiving frame_id=odom
@@ -286,17 +208,17 @@ ekf_global:
     # The GPS coordinates are valid in the map frame because gps_to_enu builds
     # a fixed inertial frame (origin = robot start, x = initial heading) which
     # is exactly what the map frame is bootstrapped to.
-    odom1: /odometry/gps
-    odom1_config: [true,  true,  false,
+    odom0: /odometry/gps
+    odom0_config: [true,  true,  false,
                    false, false, false,
                    false, false, false,
                    false, false, false,
                    false, false, false]
-    odom1_queue_size: 10
-    odom1_nodelay: true
-    odom1_differential: false           # absolute — frame_id=map avoids circular TF
-    odom1_relative: false
-    odom1_pose_rejection_threshold: 10.0  # Mahalanobis GPS outlier gate.
+    odom0_queue_size: 10
+    odom0_nodelay: true
+    odom0_differential: false           # absolute — frame_id=map avoids circular TF
+    odom0_relative: false
+    odom0_pose_rejection_threshold: 10.0  # Mahalanobis GPS outlier gate.
                                            # At RTK-fixed convergence: P_xx≈4e-4, R_GPS≈4e-4,
                                            # S≈8e-4, σ_S≈0.028 m → threshold = 0.28 m max outlier.
                                            # ZED-F9P RTK fixed spec: 0.01 m — so 0.28 m is a
@@ -350,8 +272,8 @@ ekf_global:
       # only absolute source (it told the EKF "I have no idea where I am, trust
       # the first measurement completely") but with LIO it just means the first
       # bad GPS measurement at K≈1 locks the state before LIO arrives.
-      [1.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
-       0.0,   1.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+      [1e6,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   1e6,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
        0.0,   0.0,    1e-9,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
        0.0,   0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
        0.0,   0.0,    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,

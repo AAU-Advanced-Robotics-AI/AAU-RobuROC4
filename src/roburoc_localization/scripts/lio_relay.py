@@ -170,9 +170,9 @@ class LioRelay(Node):
         self.declare_parameter('cov_omega',      0.001)
 
         # ── Covariance parameters — global channel (distance-proportional) ────
-        self.declare_parameter('cov_pos_floor',  0.01)    # 0.1 m σ floor
-        self.declare_parameter('cov_rot_floor',  0.0001)  # 0.01 rad σ floor
-        self.declare_parameter('k_drift_pos',    0.02)    # m error / m travelled
+        self.declare_parameter('cov_pos_floor',  0.1)    # 0.1 m σ floor
+        self.declare_parameter('cov_rot_floor',  0.001)  # 0.01 rad σ floor
+        self.declare_parameter('k_drift_pos',    0.003)    # m error / m travelled
         self.declare_parameter('k_drift_rot',    0.0003)  # rad / m travelled
 
         cp_l = self.get_parameter('cov_pos_local').value
