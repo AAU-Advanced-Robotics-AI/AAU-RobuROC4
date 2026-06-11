@@ -52,8 +52,8 @@ lio_relay:
     cov_omega:      0.001
     cov_pos_floor:  0.01
     cov_rot_floor:  0.0001
-    k_drift_pos:    0.01
-    k_drift_rot:    0.001
+    k_drift_pos:    0.0003
+    k_drift_rot:    0.0001
 
 # ─── Kabsch alignment (lio_to_enu) ──────────────────────────────────────────
 # Controls when and how the GPS/LIO Kabsch alignment is computed.
@@ -86,11 +86,11 @@ lio_relay:
 #     if the transform is noisy at re-acquisition.
 lio_to_enu:
   ros__parameters:
-    calib_min_baseline:  5.0    # m of RTK+moving GPS needed before first alignment
-    rtk_cov_max:         0.10   # m² — raised from 0.05 to also accept GPS float
+    calib_min_baseline:  2.0    # m of RTK+moving GPS needed before first alignment
+    rtk_cov_max:         0.015   # m² — raised from 0.05 to also accept GPS float --> 0.15 for bike path canopy transition test
     speed_threshold:     0.10   # m/s — lowered slightly from 0.20
     drift_update_dist:   2.0    # m between re-solves (was 10.0)
-    drift_window_dist:   20.0   # m sliding window extent (was 50.0)
+    drift_window_dist:   5.0   # m sliding window extent (was 50.0)
     min_window_pairs:    5      # min pairs before re-solve (was 5)
     gps_lost_timeout:    2.0    # s without RTK before declaring GPS lost
 
