@@ -12,27 +12,30 @@
 # always fresh.
 #
 # Usage:
-#   ./reprocess_bags.sh [rate_s2 [rate_s3]]
+#   ./reprocess_bags.sh [rate_s2 [rate_s3 [skip_existing]]]
 #
-#   rate_s2  Bag playback rate for Stage 2 (default 20.0)
-#   rate_s3  Bag playback rate for Stage 3 (default 15.0)
+#   rate_s2        Bag playback rate for Stage 2 (default 20.0)
+#   rate_s3        Bag playback rate for Stage 3 (default 15.0)
+#   skip_existing  true (default) = skip bags whose _ekf output already exists
+#                  false          = delete existing _odometry/_ekf and reprocess
 
 set -eo pipefail
 
 RATE_S2="${1:-20.0}"
 RATE_S3="${2:-15.0}"
+SKIP_EXISTING="${3:-true}"
 
 FOLDERS=(
     # "$HOME/RobuROC_ROSbags/ad_hoc_tests"
     # "$HOME/RobuROC_ROSbags/reference_paths"
-    "$HOME/rosbags/test_day"
+    "$HOME/rosbags/test_day_06_09"
 )
 
 # Bags recorded live (already contain /Odometry from FAST-LIO2 — no Stage 1
 # needed).  Each entry is a bag directory path; they are processed directly as
 # Stage-2 inputs alongside the _fastlio bags above.
 RAW_BAG_FOLDERS=(
-    "$HOME/data/rosbags"
+    # "$HOME/data/rosbags"
 )
 
 # Topics that must be present in a _fastlio bag before processing.
@@ -121,8 +124,9 @@ if [[ $TOTAL -eq 0 ]]; then
 fi
 
 info "Found $TOTAL _fastlio bags."
-info "  Stage-2 rate : ${RATE_S2}x"
-info "  Stage-3 rate : ${RATE_S3}x"
+info "  Stage-2 rate  : ${RATE_S2}x"
+info "  Stage-3 rate  : ${RATE_S3}x"
+info "  Skip existing : ${SKIP_EXISTING}"
 echo ""
 
 FAILED=()
@@ -138,6 +142,22 @@ for i in "${!FASTLIO_BAGS[@]}"; do
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     info "[$idx/$TOTAL] $name"
 
+    # ── Skip or delete existing outputs ──────────────────────────────────────
+    if [[ -d "$ekf_bag" ]]; then
+        if [[ "$SKIP_EXISTING" == "true" ]]; then
+            warn "  Already exists — skipping: $(basename "$ekf_bag")"
+            continue
+        else
+            warn "  Deleting existing outputs for $name"
+            for stale in "$odometry_bag" "$ekf_bag"; do
+                if [[ -d "$stale" ]]; then
+                    warn "    Deleting: $(basename "$stale")"
+                    rm -rf "$stale"
+                fi
+            done
+        fi
+    fi
+
     # ── 1. Topic check ────────────────────────────────────────────────────────
     info "  Checking required topics in $(basename "$fastlio_bag") ..."
     if ! check_topics "$fastlio_bag"; then
@@ -146,14 +166,6 @@ for i in "${!FASTLIO_BAGS[@]}"; do
         continue
     fi
     info "  All required topics present."
-
-    # Delete stale derived bags
-    for stale in "$odometry_bag" "$ekf_bag"; do
-        if [[ -d "$stale" ]]; then
-            warn "  Deleting stale: $(basename "$stale")"
-            rm -rf "$stale"
-        fi
-    done
 
     # ── 2. Stage 2: odometry ─────────────────────────────────────────────────
     info "  Stage 2 (odometry) ..."
