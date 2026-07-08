@@ -18,7 +18,7 @@ Copyright 2024 Thomas Schou Sørensen, Julian Witold Wagner and César Zacharie 
    See the License for the specific language governing permissions and
    limitations under the License.
 """
-import canopen, os, logging
+import canopen, os, logging, time, threading
 from canopen import SdoCommunicationError
 
 import rclpy
@@ -26,6 +26,7 @@ from rclpy.node import Node
 from time import sleep
 from roburoc_canopen_interfaces.msg import CANWrite, CANSubscription
 from roburoc_canopen_interfaces.srv import CANRead, CANConnection, CANPeriodicTask, CANSubscribe
+from utils.COBID import COBID
 
 # Set logging level and output files
 logging.basicConfig(level=logging.ERROR)
@@ -42,6 +43,7 @@ class RobuROC_Canopen(Node):
     _DRIVE_CONFIG = os.path.join(os.path.dirname(__file__), "AMC_Digiflex_1.0.14.eds")
     CAN_NETWORK = canopen.Network()
     CAN_NODES = []
+    _COBID = COBID()
 
     def __init__(self):
         """
@@ -60,6 +62,9 @@ class RobuROC_Canopen(Node):
         self._CAN_PERIODICTASK = {}
         self._PERIODIC_ID = 0
         self._CONNECTED = False
+        self._bus_error_state = False
+        self._last_error_log_time: float = 0.0
+        self._reconnect_thread: threading.Thread = None
 
         # Initialize subscriptions
         self.WriteSub = self.create_subscription(CANWrite, '/roburoc/CANWrite', self.Write_CB, 10)
@@ -105,11 +110,21 @@ class RobuROC_Canopen(Node):
                         response.node_list.append(node.id)
                     return response
             response.success = False
+            response.node_list = []
+            return response
         elif request.command.lower() == "disconnect":
             if self.Disconnect():
                 response.success = True
             else:
                 response.success = False
+            response.node_list = []
+            return response
+
+        self.logger.error(f"Unknown connection command: {request.command}")
+        response.success = False
+        response.node_list = []
+        return response
+    
     def Connect(self, bustype:str = 'pcan', channel:str = 'PCAN_USBBUS1', bitrate:int = 1000000):
         """
         Connection method for attempting to connect to the CANBUS network specified by bustype and channel at the specified
@@ -122,9 +137,17 @@ class RobuROC_Canopen(Node):
 
         if not self._CONNECTED:
             try:
+                # Ensure the network is cleanly disconnected before attempting to connect,
+                # in case a previous failed attempt left it in a half-connected state.
+                try:
+                    self.CAN_NETWORK.disconnect()
+                except Exception:
+                    pass
+                self.CAN_NODES.clear()
+
                 self.CAN_NETWORK.connect(bustype=bustype, channel=channel, bitrate=bitrate)
                 self._CONNECTED = True
-                if len (self.CAN_NODES) == 0:
+                if len(self.CAN_NODES) == 0:
                     try:
                         # Need at least four nodes to ensure all drives are connected
                         while len(self.CAN_NETWORK.scanner.nodes) < 4:
@@ -138,13 +161,19 @@ class RobuROC_Canopen(Node):
                         self.logger.info(f"Connected to CANBus with nodes: {node_list}")
                     except Exception as e:
                         self.logger.error(f"Unable to initialize nodes, Error: {e}")
+                        # Disconnect cleanly so the next retry can reconnect from scratch
+                        try:
+                            self.CAN_NETWORK.disconnect()
+                        except Exception:
+                            pass
+                        self.CAN_NODES.clear()
                         self._CONNECTED = False
             except Exception as error:
                 self.logger.error(f"Unable to connect to CAN Bus, Error: {error}")
                 self._CONNECTED = False
             finally:
-
                 return self._CONNECTED
+                
     def Disconnect(self):
         """
         Disconnection method for disconnection the CANBUS network and stopping/ending all
@@ -230,7 +259,10 @@ class RobuROC_Canopen(Node):
             sent_data = bytearray(data)
         try:
             task = self.CAN_NETWORK.send_periodic(cobid, sent_data, period)
-            self._CAN_PERIODICTASK.setdefault(self._PERIODIC_ID, task)
+            self._CAN_PERIODICTASK.setdefault(
+                self._PERIODIC_ID,
+                (task, cobid, bytes(sent_data) if sent_data is not None else None, period)
+            )
             self._PERIODIC_ID += 1
             return True
         except Exception as error:
@@ -244,7 +276,7 @@ class RobuROC_Canopen(Node):
         :return: Bool success
         """
         try:
-            self._CAN_PERIODICTASK[key].stop()
+            self._CAN_PERIODICTASK[key][0].stop()
             del self._CAN_PERIODICTASK[key]
             return True
         except Exception as error:
@@ -314,9 +346,33 @@ class RobuROC_Canopen(Node):
         """
         Subscription_message = CANSubscription()
         Subscription_message.cobid = COBID
-        Subscription_message.node_id = [node for node in self.CAN_NODES if COBID >> 7 == node.id][0]
+        node_id = self._resolve_node_id_from_cobid(COBID)
+        if node_id is None:
+            self.logger.warning(f"Unable to resolve node id for COBID {hex(COBID)}")
+            return
+        Subscription_message.node_id = node_id
         Subscription_message.data = list(data)
         self.SubscriptionPub.publish(Subscription_message)
+
+    def _resolve_node_id_from_cobid(self, cobid: int):
+        cobid_groups = [
+            self._COBID.CONTROL.ALL,
+            self._COBID.MODE.ALL,
+            self._COBID.ACT_VELOCITY.ALL,
+            self._COBID.ACT_CURRENT.ALL,
+            self._COBID.TARGET_VELOCITY.ALL,
+            self._COBID.TARGET_CURRENT.ALL,
+            self._COBID.SDO_WRITE.ALL,
+            self._COBID.SDO_READ.ALL,
+            self._COBID.HEARTBEAT.ALL,
+        ]
+
+        for group in cobid_groups:
+            if cobid in group:
+                return group.index(cobid) + 1
+
+        return None
+
     def Write_CB(self, message: CANWrite):
         """
         Write callback method for writing with different methods, depending on the desired target.
@@ -349,16 +405,72 @@ class RobuROC_Canopen(Node):
         :param data: The data to be sent (as a list of hexadecimals or ints).
         :return: Bool: True if the write operation was successful, False otherwise.
         """
+        if self._bus_error_state:
+            return False  # drop writes silently while bus is recovering
         data = list(data)
-        success = None
         try:
             self.CAN_NODES[node_id].sdo.download(indices[0], indices[1], bytearray(data))
-            success = True
+            return True
         except Exception as e:
-            self.logger.error(f"Error writing to SDO {indices[0]}:{indices[1]} in node {node_id}, error: {e}")
-            success = False
-        finally:
-            return success
+            now = time.monotonic()
+            if now - self._last_error_log_time > 5.0:
+                self.logger.error(
+                    f"CAN bus error on SDO {indices[0]}:{indices[1]} node {node_id}: {e} "
+                    "— entering error state, attempting reconnect"
+                )
+                self._last_error_log_time = now
+            if not self._bus_error_state:
+                self._bus_error_state = True
+                self._start_reconnect_thread()
+            return False
+
+    def _start_reconnect_thread(self):
+        if self._reconnect_thread is not None and self._reconnect_thread.is_alive():
+            return
+        self._reconnect_thread = threading.Thread(target=self._reconnect_worker, daemon=True)
+        self._reconnect_thread.start()
+
+    def _reconnect_worker(self):
+        """Background thread: wait, disconnect, reconnect, restore subscriptions + periodic tasks."""
+        sleep(3.0)
+        bustype = self.get_parameter('bustype').get_parameter_value().string_value
+        channel = self.get_parameter('channel').get_parameter_value().string_value
+        bitrate = self.get_parameter('bitrate').get_parameter_value().integer_value
+        while True:
+            self.logger.info("CAN bus reconnect attempt...")
+            try:
+                self.CAN_NETWORK.disconnect()
+            except Exception:
+                pass
+            self.CAN_NODES.clear()
+            try:
+                self.CAN_NETWORK.scanner.nodes.clear()
+            except Exception:
+                pass
+            self._CONNECTED = False
+
+            if self.Connect(bustype, channel, bitrate):
+                self.logger.info("CAN bus reconnected — restoring subscriptions and periodic tasks")
+                # Re-subscribe to all previously registered COBIDs
+                old_subs = list(self._CAN_SUBSCRIPTION)
+                self._CAN_SUBSCRIPTION.clear()
+                for cobid in old_subs:
+                    self.Subscribe(cobid, self.Generic_callback)
+                # Re-start periodic tasks (heartbeat etc.) from stored parameters
+                old_tasks = dict(self._CAN_PERIODICTASK)
+                self._CAN_PERIODICTASK.clear()
+                for key, (task_obj, cobid, stored_data, period) in old_tasks.items():
+                    try:
+                        new_task = self.CAN_NETWORK.send_periodic(cobid, stored_data, period)
+                        self._CAN_PERIODICTASK[key] = (new_task, cobid, stored_data, period)
+                    except Exception as e:
+                        self.logger.warning(f"Failed to re-start periodic task {hex(cobid)}: {e}")
+                self._bus_error_state = False
+                return
+            else:
+                self.logger.warning("CAN bus reconnect failed — retrying in 5 s")
+                sleep(5.0)
+
     def PDOwrite(self, COBID: int, data: list):
         """
         Write data to a mapped RPDO object (Controlword)

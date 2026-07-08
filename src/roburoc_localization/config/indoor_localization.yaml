@@ -1,0 +1,173 @@
+###############################################################################
+# indoor_localization.yaml — LIO-only config for indoor stack testing
+#
+# Identical topic interface to debug_localization.yaml:
+#   /odom                      (ekf_local  odom→base_link TF)
+#   /odometry/filtered/global  (ekf_global map→odom TF)
+#
+# GPS nodes (gps_to_enu, gps_relay) will be silent indoors but that is fine —
+# the EKFs simply don't receive their topics and run on LIO alone.
+# sensor_timeout: 60.0 prevents the EKFs from complaining about missing GPS.
+#
+# Usage:
+#   ros2 launch roburoc_localization localization.launch.py \
+#       localization_config:=indoor_localization.yaml
+#
+# What to verify indoors:
+#   1. /odom and /odometry/filtered/global publish at ~30 Hz
+#   2. TF: map → odom → base_link present (ros2 run tf2_tools view_frames)
+#   3. Mission Control UI shows Robot: Connected
+#   4. Push robot around: pose moves on the UI map
+#   5. Record a path (drive a loop), then send it — controller should follow
+###############################################################################
+
+# ─── LIO relay ──────────────────────────────────────────────────────────────
+# Same covariance values as the outdoor config.  Indoors FAST-LIO2 typically
+# achieves better scan-matching accuracy so these are conservative.
+lio_relay:
+  ros__parameters:
+    cov_pos_local:  0.001
+    cov_rot_local:  0.0001
+    cov_vel:        0.01
+    cov_omega:      0.001
+    cov_pos_floor:  0.01
+    cov_rot_floor:  0.0001
+    k_drift_pos:    0.003
+    k_drift_rot:    0.0003
+
+# ─── Local EKF ──────────────────────────────────────────────────────────────
+# LIO differential only — identical to the outdoor config minus GPS Doppler.
+# Publishes: /odom  (remapped in localization.launch.py)
+ekf_local:
+  ros__parameters:
+    frequency: 30.0
+    sensor_timeout: 60.0             # long timeout — GPS is absent indoors
+    two_d_mode: true
+    transform_time_offset: 0.0
+    transform_timeout: 0.05
+    print_diagnostics: false         # avoids rate warnings when CPU is loaded
+    debug: false
+    publish_tf: true
+    publish_acceleration: false
+    predict_to_current_time: true
+
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: base_link
+    world_frame: odom
+
+    odom0: /odometry/lio
+    odom0_config: [true,  true,  false,
+                   false, false, true,
+                   false, false, false,
+                   false, false, false,
+                   false, false, false]
+    odom0_queue_size: 10
+    odom0_nodelay: true
+    odom0_differential: true
+    odom0_relative: false
+    odom0_pose_rejection_threshold: 9.0
+    odom0_twist_rejection_threshold: 9.0
+
+    process_noise_covariance:
+      [1e-4,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    1e-4,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    1e-4,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    1e-3,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    1e-3,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    1e-3,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.1,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.1,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.05,   0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01]
+
+    initial_estimate_covariance:
+      [1e-9,  0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,   1e-9,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,   0.0,    1e-9,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    1e-9,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.1,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.1,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.1,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,    0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.1,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.1,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.1]
+
+# ─── Global EKF ─────────────────────────────────────────────────────────────
+# LIO absolute only — /odometry/lio/global (frame_id=map, differential=false).
+# Publishes: map→odom TF + /odometry/filtered/global
+# GPS sensor1 is absent; sensor_timeout=60.0 keeps the EKF quiet about it.
+ekf_global:
+  ros__parameters:
+    frequency: 30.0
+    sensor_timeout: 60.0             # long timeout — GPS is absent indoors
+    two_d_mode: true
+    transform_time_offset: 0.0
+    transform_timeout: 0.05
+    print_diagnostics: false
+    debug: false
+    publish_tf: true
+    publish_acceleration: false
+    predict_to_current_time: true
+
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: base_link
+    world_frame: map
+
+    odom0: /odometry/lio/global
+    odom0_config: [true,  true,  false,
+                   false, false, true,
+                   false, false, false,
+                   false, false, false,
+                   false, false, false]
+    odom0_queue_size: 10
+    odom0_nodelay: true
+    odom0_differential: false        # absolute pose in map frame
+    odom0_relative: false
+    odom0_pose_rejection_threshold: 9.0
+    odom0_twist_rejection_threshold: 9.0
+
+    process_noise_covariance:
+      [1e-4,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    1e-4,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    1e-4,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    1e-3,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    1e-3,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    1e-3,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.1,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.1,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,    0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,    0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.05,   0.0,    0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,    0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,
+       0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01]
+
+    initial_estimate_covariance:
+      [1e-9,  0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   1e-9,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    1e-9,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    1e-9,   0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     1.0,     0.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     1.0,     0.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     1.0,    0.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    1.0,    0.0,
+       0.0,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    1.0]

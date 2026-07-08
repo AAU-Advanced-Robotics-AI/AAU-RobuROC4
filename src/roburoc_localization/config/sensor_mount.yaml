@@ -1,0 +1,47 @@
+# sensor_mount.yaml — Physical sensor mounting geometry for the RobuROC4
+#
+# SINGLE SOURCE OF TRUTH for all sensor extrinsic parameters.
+#
+# All transforms are expressed relative to base_link
+# (REP-105: ground plane centred between four wheel contact patches,
+#  X forward, Y left, Z up).
+#
+# These values are consumed by:
+#   launch/fast_lio.launch.py          — odom→camera_init static TF arguments
+#   launch/offline_odometry.launch.py  — gps_to_enu lever-arm parameters
+#   launch/localization.launch.py      — gps_to_enu / navsat lever-arm
+#   urdf/sensors/livox_mid360_rtk.urdf.xacro — via xacro args passed from
+#       roburoc_bringup/launch/robot.launch.py
+#
+# When remounting a sensor, update ONLY this file.  The URDF and all launch
+# files pick up the change automatically on the next build install.
+
+livox_mid360:
+  # base_link → livox_frame joint.
+  # Also used for odom → camera_init (equals base_link → livox_frame at t=0)
+  # and for the fast_lio filter config (extrinsic_T / extrinsic_R values).
+  #
+  # Pitch measured from IMU gravity vector via livox_pitch_estimator.py.
+  # Roll and yaw are mechanically zero (mount is level and forward-aligned).
+  x:     0.60
+  y:     0.00
+  z:     0.7625
+  roll:  0.0
+  pitch: 0.44457789   # rad ≈ 25.46°
+  yaw:   0.0
+
+gps_antenna:
+  # base_link → gps_link joint.
+  # Physical mount offset measured with a tape measure.
+  # Yaw = π because the u-blox connector faces forward on the mounting bracket.
+  x:     -0.4775
+  y:      0.285
+  z:      1.495
+  roll:   0.0
+  pitch:  0.0
+  yaw:    3.14159265  # rad = 180°
+
+  # Lever arm for gps_to_enu.py: GPS antenna offset in base_link frame.
+  # These must stay consistent with the x/y values above.
+  lever_arm_x: -0.4775   # m
+  lever_arm_y:  0.285   # m

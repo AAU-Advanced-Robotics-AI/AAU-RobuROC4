@@ -1,34 +1,58 @@
 <?xml version="1.0"?>
 <!--
   roburoc.urdf.xacro - RobuROC Robot Main Entry Point
-  
-  This is the main URDF/xacro file for the RobuROC robot. It assembles
-  the complete robot by including all component files.
-  
+
+  Assembles the complete robot description and — critically — its sensor TF tree.
+  The sensor suite is selected at xacro-processing time via the sensor_config arg,
+  which is passed in from robot.launch.py.
+
   File structure:
     urdf/
-    ├── roburoc.urdf.xacro         <- You are here
+    ├── roburoc.urdf.xacro              ← You are here
     ├── common/
-    │   ├── properties.xacro       - Robot dimensions and positions
-    │   ├── materials.xacro        - URDF color definitions
-    │   └── inertia_macros.xacro   - Inertia calculation helpers
+    │   ├── properties.xacro            - Robot dimensions and mounting positions
+    │   ├── materials.xacro             - URDF colour definitions
+    │   └── inertia_macros.xacro        - Inertia calculation helpers
     ├── base/
-    │   └── chassis_and_wheels.xacro - Robot platform
+    │   └── chassis_and_wheels.xacro    - Robot platform geometry
     ├── sensors/
-    │   ├── d435_camera.urdf.xacro   - Intel RealSense D435 cameras
-    │   ├── d435_camera.gazebo.xacro - D435 Gazebo sensor
-    │   └── vlp16_lidar.urdf.xacro   - Velodyne VLP-16 lidar
+    │   ├── realsense_velodyne.urdf.xacro  - 2× RealSense D435i + Velodyne VLP-16
+    │   ├── livox_mid360_rtk.urdf.xacro    - Livox MID360 + u-blox ZED-F9P RTK-GPS
+    │   ├── d435_camera.urdf.xacro         - D435i macro (used by realsense_velodyne)
+    │   ├── d435_camera.gazebo.xacro       - D435i Gazebo sensor plugin
+    │   └── vlp16_lidar.urdf.xacro         - VLP-16 macro (used by realsense_velodyne)
     └── gazebo/
-        └── simulation.xacro       - Gazebo physics and drive plugins
-        
+        └── simulation.xacro            - Gazebo physics and drive plugins
+
+  Adding a new sensor configuration:
+    1. Create urdf/sensors/<your_config>.urdf.xacro defining the links and joints.
+    2. Add a matching <xacro:if> block in the "Sensors" section below.
+    3. Create launch/sensors/<your_config>.launch.py for the hardware drivers.
+    4. Pass sensor_config:=<your_config> to robot.launch.py.
+
   Usage:
-    # Generate URDF:
-    xacro roburoc.urdf.xacro > roburoc.urdf
-    
-    # View in RViz:
-    ros2 launch roburoc_description display.launch.py
+    # Explicit config (default is realsense_velodyne):
+    ros2 launch roburoc_bringup robot.launch.py sensor_config:=livox_mid360_rtk
+
+    # Generate URDF manually:
+    xacro roburoc.urdf.xacro sensor_config:=livox_mid360_rtk > roburoc.urdf
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="RobuROC">
+
+    <!-- ############################################## -->
+    <!--              Sensor Configuration             -->
+    <!-- ############################################## -->
+    <!--
+      Select which sensor suite is physically attached to the robot.
+      This controls both the TF frames published by robot_state_publisher
+      and the hardware drivers launched by robot.launch.py.
+
+      Available values:
+        realsense_velodyne   — 2× RealSense D435i + Velodyne VLP-16  (default)
+        livox_mid360_rtk     — Livox MID360 LiDAR + u-blox ZED-F9P RTK-GPS
+    -->
+    <xacro:arg name="sensor_config" default="realsense_velodyne"/>
+    <xacro:property name="sensor_config" value="$(arg sensor_config)"/>
 
     <!-- ############################################## -->
     <!--              Common Definitions               -->
@@ -50,11 +74,14 @@
     <!-- ############################################## -->
     <!--                   Sensors                     -->
     <!-- ############################################## -->
-    <!-- Intel RealSense D435 depth cameras (front + rear) -->
-    <xacro:include filename="$(find roburoc_description)/urdf/sensors/d435_camera.urdf.xacro"/>
-    
-    <!-- Velodyne VLP-16 lidar -->
-    <xacro:include filename="$(find roburoc_description)/urdf/sensors/vlp16_lidar.urdf.xacro" />
+    <!-- Dispatch to the selected sensor-configuration xacro. -->
+    <xacro:if value="${sensor_config == 'realsense_velodyne'}">
+        <xacro:include filename="$(find roburoc_description)/urdf/sensors/realsense_velodyne.urdf.xacro"/>
+    </xacro:if>
+
+    <xacro:if value="${sensor_config == 'livox_mid360_rtk'}">
+        <xacro:include filename="$(find roburoc_description)/urdf/sensors/livox_mid360_rtk.urdf.xacro"/>
+    </xacro:if>
 
     <!-- ############################################## -->
     <!--           Gazebo Simulation Config            -->

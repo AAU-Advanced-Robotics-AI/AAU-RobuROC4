@@ -1,0 +1,75 @@
+<?xml version="1.0"?>
+<!--
+  livox_mid360_rtk.urdf.xacro — Sensor configuration: livox_mid360_rtk
+
+  Sensor suite used from the 2025/2026 FAST-LIO2 + RTK-GPS project:
+    - Livox MID360 solid-state LiDAR (with built-in IMU)
+    - u-blox ZED-F9P RTK-GPS receiver
+
+  Frames contributed to the TF tree:
+    livox_frame      — MID360 sensor origin.  Matches the livox_ros_driver2 default
+                       frame_id ("livox_frame") so no extra static TF is needed.
+                       FAST-LIO2 calls this frame "body" internally.
+    gps_link         — RTK antenna phase centre.  Physical attachment frame; uses the
+                       _link suffix convention (REP-105).
+    gps              — Driver frame alias for gps_link.  The ublox driver stamps its
+                       NavSatFix and fix_velocity messages with frame_id="gps" (driver
+                       default).  An identity joint gps_link→gps bridges the naming gap.
+
+  All transforms are measured from the base_link origin (ground plane centred
+  between the four wheel contact patches, X forward, Y left, Z up per REP-105).
+
+  No visual or collision geometry is defined: this configuration is intended for
+  real hardware only, not simulation.
+
+  TF tree (from this file):
+    base_link → livox_frame
+    base_link → gps_link → gps
+
+  See also:
+    launch/sensors/livox_mid360_rtk.launch.py   — drivers for this config
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+    <!-- ── Livox MID360 ───────────────────────────────────────────────────── -->
+    <!-- Mounted on the front safety frame, centred left/right.               -->
+    <!-- XYZ reuses the front camera position (0.6, 0, 0.55) as a placeholder -->
+    <!-- until physically measured. Pitch is measured from the IMU gravity     -->
+    <!-- vector (see livox_pitch_estimator.py); roll and yaw are zero.        -->
+    <link name="livox_frame"/>
+
+    <joint name="mid360_joint" type="fixed">
+        <parent link="base_link"/>
+        <child  link="livox_frame"/>
+        <origin xyz="0.60 0.0 0.7625" rpy="0 0.43618904 0"/>
+    </joint>
+
+    <!-- ── u-blox ZED-F9P RTK antenna ───────────────────────────────────── -->
+    <!-- The antenna is mounted offset from the robot centreline and rotated  -->
+    <!-- 180° (yaw = π) because the connector faces forward on the mount.    -->
+    <!-- Measurements: x=-0.428 m, y=0.295 m (left of centre), z=1.495 m.   -->
+    <!-- Note: the ublox driver publishes NavSatFix with frame_id="gps"      -->
+    <!-- (driver default); that bare name is left as-is.  This URDF link uses the -->
+    <!-- _link suffix convention for physical attachment frames.              -->
+    <link name="gps_link"/>
+
+    <joint name="gps_joint" type="fixed">
+        <parent link="base_link"/>
+        <child  link="gps_link"/>
+        <origin xyz="-0.4775 0.285 1.495" rpy="0 0 3.14159265"/>
+    </joint>
+
+    <!-- ── gps (driver frame alias) ──────────────────────────────────────── -->
+    <!-- The u-blox driver stamps NavSatFix and fix_velocity with            -->
+    <!-- frame_id="gps" (bare name, driver default).  This identity joint    -->
+    <!-- connects the physical gps_link to the driver frame_id, completing   -->
+    <!-- the TF chain: base_link → gps_link → gps.                           -->
+    <link name="gps"/>
+
+    <joint name="gps_link_to_gps" type="fixed">
+        <parent link="gps_link"/>
+        <child  link="gps"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+
+</robot>

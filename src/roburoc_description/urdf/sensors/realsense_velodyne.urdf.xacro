@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<!--
+  realsense_velodyne.urdf.xacro — Sensor configuration: realsense_velodyne
+
+  Sensor suite used by the original P8/P9 groups:
+    - 2 × Intel RealSense D435i depth cameras (front + rear)
+    - 1 × Velodyne VLP-16 spinning LiDAR
+
+  Frames contributed to the TF tree (defined in the included files):
+    camera1_link, camera1_color_frame, camera1_color_optical_frame, …
+    camera2_link, camera2_color_frame, camera2_color_optical_frame, …
+    velodyne_base_link, velodyne
+
+  Mounting positions are read from common/properties.xacro.
+
+  See also:
+    launch/sensors/realsense_velodyne.launch.py   — drivers for this config
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+    <!-- Two RealSense D435i cameras with IMU -->
+    <xacro:include filename="$(find roburoc_description)/urdf/sensors/d435_camera.urdf.xacro"/>
+
+    <!-- Velodyne VLP-16 spinning LiDAR -->
+    <xacro:include filename="$(find roburoc_description)/urdf/sensors/vlp16_lidar.urdf.xacro"/>
+
+</robot>

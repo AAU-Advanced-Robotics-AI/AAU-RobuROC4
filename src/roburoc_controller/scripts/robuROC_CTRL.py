@@ -12,10 +12,9 @@ from rclpy.node import Node
 from sensor_msgs.msg import Joy
 from time import sleep
 
-logging.basicConfig(level=logging.DEBUG,
+logging.basicConfig(level=logging.WARNING,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                    handlers=[logging.FileHandler("CAN_Logs"),
-                              logging.StreamHandler()])
+                    handlers=[logging.FileHandler("CAN_Logs")])
 
 class RobuROC_CTRL(Node):
     """
@@ -33,8 +32,9 @@ class RobuROC_CTRL(Node):
     _PERIODIC = False
     _HEARTBEAT = False
 
-    # Public variables
-    MAX_SPEED = 2  # Meters per second
+    # Public variables (defaults; overridden by ROS parameters at runtime)
+    MAX_SPEED = 1.0    # Meters per second (normal operating speed)
+    TURBO_SPEED = 2.0  # Meters per second (turbo mode via R2, double normal speed)
     WHEEL_RADIUS = 0.28  # Meters
 
     # Constants
@@ -49,13 +49,32 @@ class RobuROC_CTRL(Node):
         super().__init__('ROC_CTRL')
         self.logger = self.get_logger()
 
+        # Declare and read speed parameters (overridable from launch file)
+        self.declare_parameter('max_speed',   self.MAX_SPEED)
+        self.declare_parameter('turbo_speed', self.TURBO_SPEED)
+        self.MAX_SPEED   = self.get_parameter('max_speed').get_parameter_value().double_value
+        self.TURBO_SPEED = self.get_parameter('turbo_speed').get_parameter_value().double_value
+        self.logger.info(f'Speed limits — normal: {self.MAX_SPEED} m/s, turbo: {self.TURBO_SPEED} m/s')
+
+        # navigation_mode: when True, movement comes via /roburoc/cmd_vel from the
+        # navigation stack (joy_relay → control_mux).  The joy subscription is
+        # replaced by a management-only callback that handles only:
+        #   ■ (square, buttons[1]) — brake + re-enable drives (press at startup)
+        #   ⬤ (circle, buttons[3]) — recover from error / E-stop
+        # This prevents the "no buttons held = stop" Joy logic from overriding
+        # autonomous navigation commands.
+        self.declare_parameter('navigation_mode',      False)
+        self.declare_parameter('joy_management_topic', '/joy_physical')
+        navigation_mode      = self.get_parameter('navigation_mode').get_parameter_value().bool_value
+        joy_management_topic = self.get_parameter('joy_management_topic').get_parameter_value().string_value
+
         # Setup canopen help modules
         self._CTW = CTW()
         self._COBID = COBID()
 
         # Set up publisher
         self.WritePub = self.create_publisher(CANWrite, '/roburoc/CANWrite', 10)
-        self.SpeedPub = self.create_publisher(CANSubscribe, '/roburoc/Velocity', 10)
+        self.SpeedPub = self.create_publisher(CANSubscription, '/roburoc/Velocity', 10)
 
         # Set up service clients
         self.ConnectionSrvCli = self.create_client(CANConnection, '/roburoc/CANConnection')
@@ -69,7 +88,19 @@ class RobuROC_CTRL(Node):
 
         # Set up subscriptions
         self.SubscriptionSub = self.create_subscription(CANSubscription, '/roburoc/CANSubscription', self.Subscription_CB, 10)
-        self.VelSubJoy = self.create_subscription(Joy, '/joy', self.setSpeed, 10)
+        if navigation_mode:
+            self.logger.info(
+                f'Navigation mode: joy management via {joy_management_topic} '
+                f'(■=brake/enable, ⬤=recover). Movement via /roburoc/cmd_vel.'
+            )
+            self.create_subscription(Joy, joy_management_topic, self._management_buttons_cb, 10)
+            # Safety watchdog: zero wheels if no /roburoc/cmd_vel arrives within timeout.
+            self.declare_parameter('cmd_vel_timeout', 0.5)
+            self._cmd_vel_timeout = self.get_parameter('cmd_vel_timeout').get_parameter_value().double_value
+            self._last_cmd_vel_time: float = 0.0
+            self.create_timer(0.1, self._cmd_vel_watchdog)
+        else:
+            self.VelSubJoy = self.create_subscription(Joy, '/joy', self.setSpeed, 10)
         self.VelSubCmd = self.create_subscription(Twist, '/roburoc/cmd_vel', self.setSpeed, 10)
 
         # Set up interface variables
@@ -88,7 +119,7 @@ class RobuROC_CTRL(Node):
             rclpy.spin_until_future_complete(self, response)
             self._CONNECTED = response.result().success
             self._CAN_NODES.extend(response.result().node_list)
-            self.logger.info(f"Connected to nodes: {self._CAN_NODES}")
+        self.logger.info(f"Connected to nodes: {self._CAN_NODES}")
         if self._CONNECTED == True:
             self.NMT_Write([self._CTW.RESET])
             self.NMT_Write([self._CTW.ENABLE_OP])
@@ -158,6 +189,7 @@ class RobuROC_CTRL(Node):
             if type(message) == type(Joy()) and any(message.buttons):
                 self.gamepad_control(message)
             elif type(message) == type(Twist()):
+                self._last_cmd_vel_time = time.time()
                 self.navigation_control(message)
             elif type(message) == type(Joy()) and not any(message.buttons):
                 time.sleep(0.01) # Ensures that the CANBus is not overloaded
@@ -174,6 +206,43 @@ class RobuROC_CTRL(Node):
         except Exception as e:
             self.logger.error(f"Unknown message format; error {e}")
 
+    def _cmd_vel_watchdog(self):
+        """Zero all wheels when no /roburoc/cmd_vel has arrived within cmd_vel_timeout."""
+        if self._last_cmd_vel_time == 0.0:
+            return  # never received any command yet; don't interfere
+        if time.time() - self._last_cmd_vel_time > self._cmd_vel_timeout:
+            self.SDO_Write(0, [0x60FF, 0x00], [0x00])
+            self.SDO_Write(1, [0x60FF, 0x00], [0x00])
+            self.SDO_Write(2, [0x60FF, 0x00], [0x00])
+            self.SDO_Write(3, [0x60FF, 0x00], [0x00])
+            self._last_cmd_vel_time = 0.0  # reset so we only zero once per gap
+
+    def _management_buttons_cb(self, message):
+        """
+        Navigation-mode joy callback — handles ONLY motor management buttons.
+
+        Used when navigation_mode=True. Movement comes via /roburoc/cmd_vel from the
+        navigation stack; this callback only reacts to button presses and ignores
+        all axes and the "no buttons" state (so autonomous motion is never interrupted).
+
+          ■  (square,  buttons[1]) — stop wheels + brake + re-enable drives.
+                                     Press once at startup to put drives in ready state.
+          ⬤  (circle,  buttons[3]) — NMT reset + re-enable (recover from error/E-stop).
+        """
+        try:
+            if len(message.buttons) > 1 and message.buttons[1] == 1:   # ■ square
+                self.SDO_Write(0, [0x60FF, 0x00], [0x00])
+                self.SDO_Write(1, [0x60FF, 0x00], [0x00])
+                self.SDO_Write(2, [0x60FF, 0x00], [0x00])
+                self.SDO_Write(3, [0x60FF, 0x00], [0x00])
+                self.brake()
+                self.logger.info('■ Square pressed: brake + re-enable drives')
+            elif len(message.buttons) > 3 and message.buttons[3] == 1:  # ⬤ circle
+                self.recover()
+                self.logger.info('⬤ Circle pressed: recover from error')
+        except Exception as e:
+            self.logger.error(f'_management_buttons_cb error: {e}')
+
     def gamepad_control(self, message):
         """
         Gamepad control method, utilizes the DUALSHOCK controller for operating the platform.
@@ -181,6 +250,8 @@ class RobuROC_CTRL(Node):
         the use of a dead-man switch. The following are the available commands:
 
         - '▲' + Left Stick: Set wheel speeds based on linear and angular axes. ('▲' is the dead-man switch)
+        - '▲' + D-pad: Same as left stick but using the D-pad arrows for directional input. D-pad takes priority when active.
+        - '▲' + R2 + Left Stick / D-pad: Turbo mode — doubles max speed to TURBO_SPEED (2 m/s). Release R2 to return to MAX_SPEED (1 m/s).
         - `■`: Brakes the vehicle.
         - `⬤`: Recovers from an error state or after re-enabling the security measures
         :param message:
@@ -188,9 +259,26 @@ class RobuROC_CTRL(Node):
         """
 
         if message.buttons[2] == 1: # '▲'
-            left, right = None, None
-            left = round(message.axes[1] - message.axes[0]/ 4, 4) * 1.0
-            right = -round(message.axes[1] + message.axes[0]/ 4, 4) * 1.0
+            # R2 (right trigger) enables turbo mode — supports both analog (axes[5]) and digital (buttons[7])
+            turbo = (len(message.axes) > 5 and message.axes[5] < 0) or \
+                    (len(message.buttons) > 7 and message.buttons[7] == 1)
+            speed_multiplier = self.TURBO_SPEED if turbo else self.MAX_SPEED
+
+            stick_x = message.axes[0] if len(message.axes) > 0 else 0.0
+            stick_y = message.axes[1] if len(message.axes) > 1 else 0.0
+            dpad_x = message.axes[6] if len(message.axes) > 6 else 0.0
+            dpad_y = message.axes[7] if len(message.axes) > 7 else 0.0
+
+            # D-pad takes priority when active; fall back to left stick otherwise
+            if dpad_x != 0.0 or dpad_y != 0.0:
+                linear = dpad_y
+                angular = dpad_x   # axes[6]: left=+1, right=-1 — same convention as axes[0]
+            else:
+                linear = stick_y
+                angular = stick_x
+
+            left = round(linear - angular / 4, 4) * speed_multiplier
+            right = -round(linear + angular / 4, 4) * speed_multiplier
             vel_MPS = int(left * (self._SCALE_VELOCITY / self._SCALE_RPM_TO_MPS))
             vel2_MPS = int(right * (self._SCALE_VELOCITY / self._SCALE_RPM_TO_MPS))
             vel_MPS = list(bytearray(vel_MPS.to_bytes(4, byteorder='little', signed=True)))
@@ -210,28 +298,38 @@ class RobuROC_CTRL(Node):
 
     def navigation_control(self, message):
         """
-        Navigation control method, utilising the internal linear and angular velocity commands embedded in most
-        algorithms and packages in ROS2.
+        Navigation control method for ROS2 Twist messages (linear.x m/s, angular.z rad/s).
 
-        TODO: Test (Not done)
-        :param message:
-        :return:
+        Uses the same skid-steer differential-drive kinematics as gamepad_control:
+            v_left  = linear.x - angular.z * (W/2)    W/2 = 0.25 m (track width ~0.5 m)
+            v_right = linear.x + angular.z * (W/2)
+
+        Motor direction convention (matches gamepad_control):
+            Wheel 0 (FL) / Wheel 3 (RL): left side  — positive = forward
+            Wheel 1 (FR) / Wheel 2 (RR): right side — motor runs in reverse convention,
+                                          so the right value is negated before conversion.
+
+        :param message: geometry_msgs/Twist
+        :return: None
         """
-        if message.angular.z < 0.4:
-            left = round(message.linear.x + message.angular.z / 4, 4) * 2
-            right = round(message.linear.x - message.angular.z / 4, 4) * 2
-        else:
-            turn_magnitude = round(message.angular.z / 2, 4)
-            left = turn_magnitude
-            right = -turn_magnitude
-        vel_MPS = int(left * (self._SCALE_VELOCITY / self._SCALE_RPM_TO_MPS))
-        vel2_MPS = int(-right * (self._SCALE_VELOCITY / self._SCALE_RPM_TO_MPS))
-        vel_MPS = list(bytearray(vel_MPS.to_bytes(4, byteorder='little', signed=True)))
+        linear  = message.linear.x
+        angular = message.angular.z
+
+        # Differential skid-steer mixing (identical sign convention to gamepad_control)
+        left  = round(linear - angular / 4, 4)
+        right = -round(linear + angular / 4, 4)   # negated: right motors run in reverse
+
+        scale    = self._SCALE_VELOCITY / self._SCALE_RPM_TO_MPS
+        vel_MPS  = int(left  * scale)
+        vel2_MPS = int(right * scale)              # right already negated above
+
+        vel_MPS  = list(bytearray(vel_MPS.to_bytes(4, byteorder='little', signed=True)))
         vel2_MPS = list(bytearray(vel2_MPS.to_bytes(4, byteorder='little', signed=True)))
-        self.SDO_Write(0, [0x60FF, 0x00], vel_MPS)
-        self.SDO_Write(1, [0x60FF, 0x00], vel2_MPS)
-        self.SDO_Write(2, [0x60FF, 0x00], vel2_MPS)
-        self.SDO_Write(3, [0x60FF, 0x00], vel_MPS)
+
+        self.SDO_Write(0, [0x60FF, 0x00], vel_MPS)   # FL left
+        self.SDO_Write(1, [0x60FF, 0x00], vel2_MPS)  # FR right
+        self.SDO_Write(2, [0x60FF, 0x00], vel2_MPS)  # RR right
+        self.SDO_Write(3, [0x60FF, 0x00], vel_MPS)   # RL left
 
 
     def brake(self):
@@ -387,20 +485,20 @@ class RobuROC_CTRL(Node):
         :param message:
         :return: None
         """
+        handled = False
+
         if message.cobid in self._COBID.ACT_CURRENT.ALL:
             current = int.from_bytes(message.data, 'little', signed=True)
             current_amps = current * (pow(2, 13) / 40.0) # to amps
             self._CURRENT_PERIODIC[message.node_id-1] = current_amps
-        else:
-            self.logger.log(logging.ERROR, f"COBID {message.cobid} not recognised")
+            handled = True
 
         if message.cobid in self._COBID.ACT_VELOCITY.ALL:
             velocity = int.from_bytes(message.data, 'little', signed=True)
             velocity_mps = velocity / ((((pow(2, 17) / (2 * 20000) * pow(2, 19)) / 1000) * 32) * (((2.0 * 3.14) / 60.0) * 0.28)) # To MPS
             self._VELOCITY_PERIODIC[message.node_id-1] = velocity_mps
             self.SpeedPub.publish(message)
-        else:
-            self.logger.log(logging.ERROR, f"COBID {message.cobid} not recognized")
+            handled = True
 
         if message.cobid in self._COBID.HEARTBEAT.ALL:
             status = int.from_bytes(message.data, 'little', signed=True)
@@ -412,6 +510,10 @@ class RobuROC_CTRL(Node):
                 self._STATUS_PERIODIC[message.node_id-1] = 'PRE-OPERATIONAL'
             else:
                 self._STATUS_PERIODIC[message.node_id-1] = 'UNKNOWN'
+            handled = True
+
+        if not handled:
+            self.logger.debug(f"COBID {message.cobid} not recognised")
 def main():
     rclpy.init()
     ctrl = RobuROC_CTRL()
