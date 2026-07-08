@@ -1,0 +1,101 @@
+pgo:
+  ros__parameters:
+    # ---- topics / frames ---------------------------------------------------
+    # Offline replay against RobuROC4 bags: FAST-LIO re-run live provides
+    # /Odometry + /cloud_registered; NavPVT is replayed from the raw bag under
+    # its recorded name /ublox_gps_node/navpvt.
+    odom_topic: /Odometry
+    cloud_topic: /cloud_registered
+    cloud_frame_mode: odom               # /cloud_registered is in the world frame
+    gps_input_mode: fused                # position+cov from /fix, RTK flag from navpvt
+    navpvt_topic: /ublox_gps_node/navpvt # supplies the fixed/float/none flag only
+    gps_topic: /ublox_gps_node/fix       # NavSatFix position + covariance
+    map_frame: map
+    base_frame: base_link
+    gps_frame: gps_link                  # RobuROC4 URDF antenna link name
+    publish_tf: true
+    sync_slop: 0.1
+    save_directory: ~/data/rosbags/test_day_05_28/pgo_output_161115
+
+    # ---- fallback extrinsics (offline TF lacks base_link<->gps_link) --------
+    # body frame = livox_frame (FAST-LIO /Odometry child). Derived from
+    # roburoc_localization/config/sensor_mount.yaml:
+    #   base_link->livox_frame  t=(0.60,0,0.7625) pitch=0.44457789 rad
+    #   base_link->gps          t=(-0.4775,0.285,1.495) yaw=pi
+    # antenna_lever = gps expressed in livox_frame; t/q_body_base = livox->base_link.
+    antenna_lever: [-1.28779, 0.285, 0.197888]
+    t_body_base:   [-0.213742, 0.0, -0.946425]
+    q_body_base:   [0.975395, 0.0, -0.220463, 0.0]   # w x y z (pitch -0.44457789)
+
+    # ---- keyframing ---------------------------------------------------------
+    keyframe_dist: 1.0
+    keyframe_angle_deg: 15.0
+    keyframe_voxel: 0.25
+    cloud_min_range: 0.5
+    cloud_max_range: 100.0
+
+    # ---- factor noise -------------------------------------------------------
+    prior_sigma_rot: 0.05
+    prior_sigma_trans: 0.10
+    odom_sigma_rot: 0.01
+    odom_sigma_trans: 0.05
+
+    # ---- GPS ----------------------------------------------------------------
+    # Dataset is mostly RTK-float (~13% fixed, ~12% float, ~74% none per run).
+    # Each NavSatFix covariance is scaled by its RTK class (from navpvt):
+    #   fixed -> x1, float -> x25 variance (~x5 sigma), none -> weak nonrtk_sigma.
+    # ENU<->map alignment uses a homogeneous set (fixed-only or float-only).
+    use_gps: true
+    use_float: true
+    use_nonrtk: true                     # keep 'none' as weak 3 m backstop factors
+    fixed_sigma_floor: 0.02
+    fixed_sigma_cap: 0.30
+    float_sigma_floor: 0.30              # floor for scaled float sigma [m]
+    gps_cov_scale_fixed: 1.0
+    gps_cov_scale_float: 25.0            # 25x variance ~= 5x sigma
+    nonrtk_sigma: 3.0
+    gps_z_sigma_scale: 2.0
+    # legacy drifting-bias float params (unused now; kept for compatibility)
+    float_meas_sigma: 0.15
+    float_bias_prior_sigma: 2.0
+    float_bias_rw_sigma: 0.10
+    float_bias_session_gap: 30.0
+    gps_robust: true
+    gps_time_tol: 0.20
+    gps_max_interp_gap: 0.6
+    gps_assoc_timeout: 5.0
+    fixed_max_std: 0.05
+    float_max_std: 1.0
+
+    # ---- ENU <-> map alignment ---------------------------------------------
+    align_min_travel: 10.0
+    align_min_travel_float: 40.0
+    align_min_pairs: 10
+    align_max_rms: 1.0                    # [m] fixed alignment accept threshold
+    align_max_rms_float: 2.5              # [m] looser threshold for float-only fit
+
+    # ---- loop closure -------------------------------------------------------
+    enable_loop_closure: true
+    sc_num_ring: 20
+    sc_num_sector: 60
+    sc_max_radius: 80.0
+    sc_dist_threshold: 0.13
+    sc_num_candidates: 10
+    sc_exclude_recent: 50
+    sc_lidar_height: 0.7625               # Mid-360 height above ground (sensor_mount z)
+    loop_min_query_gap: 5
+    loop_period: 0.5
+    loop_max_per_tick: 2
+    icp_method: gicp
+    icp_voxel: 0.4
+    submap_size: 12
+    icp_max_corr: 2.0
+    icp_min_fitness: 0.45
+    icp_max_rmse: 0.40
+    loop_sigma_rot: 0.05
+    loop_sigma_trans: 0.20
+    loop_robust_k: 1.0
+
+    # ---- outputs ------------------------------------------------------------
+    map_voxel: 0.30
+    map_pub_period: 0.0

@@ -1,0 +1,88 @@
+pgo:
+  ros__parameters:
+    # ---- topics / frames ---------------------------------------------------
+    odom_topic: /Odometry                # FAST-LIO2 (livox_frame w.r.t. start)
+    cloud_topic: /cloud_registered       # deskewed scan
+    cloud_frame_mode: odom               # 'odom' for /cloud_registered,
+                                         # 'body' for /cloud_registered_body
+    gps_input_mode: navpvt               # navpvt | navsatfix
+    navpvt_topic: /navpvt
+    gps_topic: /fix                      # used only in navsatfix mode
+    map_frame: map
+    base_frame: base_link
+    gps_frame: gps_frame                 # antenna frame in your TF tree
+    publish_tf: true                     # broadcast map -> odom
+    sync_slop: 0.1                       # [s] odom/cloud sync tolerance
+    save_directory: ~/pgo_output
+
+    # fallback extrinsics if TF is unavailable. body = odometry child frame
+    # (livox_frame). antenna_lever = antenna position in the body frame [m].
+    antenna_lever: [0.0, 0.0, 0.0]
+    t_body_base: [0.0, 0.0, 0.0]
+    q_body_base: [1.0, 0.0, 0.0, 0.0]    # w x y z
+
+    # ---- keyframing ---------------------------------------------------------
+    keyframe_dist: 1.0                   # [m]
+    keyframe_angle_deg: 15.0             # [deg]
+    keyframe_voxel: 0.25                 # [m]
+    cloud_min_range: 0.5                 # [m] remove robot-body points
+    cloud_max_range: 100.0               # [m]
+
+    # ---- factor noise -------------------------------------------------------
+    prior_sigma_rot: 0.05                # [rad]
+    prior_sigma_trans: 0.10              # [m]
+    odom_sigma_rot: 0.01                 # [rad] per ~1 m keyframe step
+    odom_sigma_trans: 0.05               # [m]
+
+    # ---- GPS ----------------------------------------------------------------
+    use_gps: true
+    use_float: true
+    use_nonrtk: false                    # plain 3D fixes as weak factors
+    fixed_sigma_floor: 0.02              # [m] never trust fixed below this
+    fixed_sigma_cap: 0.30                # [m] drop implausible "fixed" fixes
+    # RTK float = slowly drifting bias + small white noise:
+    float_meas_sigma: 0.15               # [m] white-noise part
+    float_bias_prior_sigma: 2.0          # [m] bias magnitude bound / session
+    float_bias_rw_sigma: 0.10            # [m/sqrt(s)] bias drift rate
+    float_bias_session_gap: 30.0         # [s] gap starting a new bias chain
+    nonrtk_sigma: 3.0                    # [m]
+    gps_z_sigma_scale: 2.0               # de-weight GPS altitude
+    gps_robust: true                     # Huber on fixed/non-RTK factors
+    gps_time_tol: 0.20                   # [s] keyframe<->fix association
+    gps_max_interp_gap: 0.6              # [s]
+    gps_assoc_timeout: 5.0               # [s]
+    # NavSatFix fallback classification (navsatfix mode only):
+    fixed_max_std: 0.05                  # [m]
+    float_max_std: 1.0                   # [m]
+
+    # ---- ENU <-> map alignment ---------------------------------------------
+    align_min_travel: 10.0               # [m] with RTK-fixed pairs
+    align_min_travel_float: 40.0         # [m] if only float available
+    align_min_pairs: 10
+    align_max_rms: 1.0                   # [m]
+
+    # ---- loop closure -------------------------------------------------------
+    enable_loop_closure: true
+    sc_num_ring: 20
+    sc_num_sector: 60
+    sc_max_radius: 80.0                  # [m] Mid-360 practical range
+    sc_dist_threshold: 0.13              # lower = stricter
+    sc_num_candidates: 10
+    sc_exclude_recent: 50                # [keyframes]
+    sc_lidar_height: 1.0                 # [m] sensor above ground
+    loop_min_query_gap: 5                # [keyframes]
+    loop_period: 0.5                     # [s] detection thread period
+    loop_max_per_tick: 2
+    icp_method: gicp                     # gicp | point_to_point
+    icp_voxel: 0.4                       # [m]
+    submap_size: 12                      # +- keyframes around candidate
+    icp_max_corr: 2.0                    # [m]
+    icp_min_fitness: 0.45
+    icp_max_rmse: 0.40                   # [m]
+    loop_sigma_rot: 0.05                 # [rad]
+    loop_sigma_trans: 0.20               # [m]
+    loop_robust_k: 1.0                   # Cauchy parameter
+
+    # ---- outputs ------------------------------------------------------------
+    map_voxel: 0.30                      # [m]
+    map_pub_period: 0.0                  # [s] periodic /pgo/map (0 = off)
